@@ -310,3 +310,15 @@
     </script>
 </body>
 </html>
+const datos = {
+    id: idVentaActual,
+    nombre: document.getElementById('nombre').value,
+    apellido: document.getElementById('apellido'].value,
+    dni: document.getElementById('dni').value,
+    email: document.getElementById('email').value,
+    instagram: document.getElementById('instagram').value.trim(), // <--- NUEVO
+    tipo_entrada: document.getElementById('tipo_entrada').value,
+    ingresado: false,
+    id_venta: idVentaActual,
+    estado_pago: 'pendiente'
+};
