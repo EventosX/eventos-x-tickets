@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eventos X - Modo Match</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root { --azul: #3b82f6; --fondo: #0a0a0a; --caja: #161616; --rosa: #ec4899; --verde: #10b981; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--fondo); color: white; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }
+        .container { background: var(--caja); padding: 30px; border-radius: 20px; border: 1px solid #333; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+        h1 { font-size: 24px; letter-spacing: 1px; margin-bottom: 10px; }
+        h1 span { color: var(--rosa); }
+        input { width: 100%; padding: 14px; margin-bottom: 15px; background: #0a0a0a; border: 1px solid #333; color: white; border-radius: 10px; font-size: 16px; text-align: center; box-sizing: border-box; }
+        input:focus { outline: none; border-color: var(--rosa); }
+        .btn { background: var(--rosa); color: white; border: none; padding: 14px; width: 100%; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; text-transform: uppercase; transition: 0.3s; }
+        .btn:hover { opacity: 0.9; transform: translateY(-2px); }
+        
+        #pantalla-match { display: none; }
+        .card-perfil { background: #1a1a1a; border: 1px solid #333; border-radius: 15px; padding: 25px; margin-bottom: 20px; min-height: 180px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .card-perfil h2 { margin: 0 0 10px 0; font-size: 26px; color: white; }
+        .acciones { display: flex; gap: 15px; }
+        .btn-accion { flex: 1; padding: 15px; border-radius: 12px; font-weight: bold; font-size: 18px; cursor: pointer; border: none; transition: 0.2s; }
+        .btn-pasar { background: #222; color: #ef4444; border: 1px solid #ef4444; }
+        .btn-like { background: var(--verde); color: #000; }
+        
+        #modal-match { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 1000; justify-content: center; align-items: center; padding: 20px; flex-direction: column; text-align: center; }
+        #modal-match h2 { font-size: 32px; color: var(--rosa); margin-bottom: 10px; }
+        .btn-ig { background: #E1306C; color: white; text-decoration: none; padding: 15px 30px; border-radius: 12px; font-weight: bold; display: inline-block; margin-top: 20px; font-size: 16px; }
+    </style>
+</head>
+<body>
+
+    <div class="container" id="pantalla-login">
+        <h1>TINDER <span>X</span></h1>
+        <p style="color: #888; font-size: 13px; margin-bottom: 20px;">Ingresá a la fiesta para activar el modo match.</p>
+        <input type="text" id="input-dni" placeholder="Tu DNI (8 números)" maxlength="8" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+        <button class="btn" onclick="ingresarAlModoMatch()">Entrar al Modo Match</button>
+    </div>
+
+    <div class="container" id="pantalla-match">
+        <h1>MATCH <span>X</span></h1>
+        <p style="color: #888; font-size: 12px; margin-bottom: 20px;" id="usuario-logueado"></p>
+        
+        <div class="card-perfil" id="tarjeta-candidato">
+            <p style="color: #666;">Buscando personas en la fiesta...</p>
+        </div>
+
+        <div class="acciones" id="botones-accion" style="display: none;">
+            <button class="btn-accion btn-pasar" onclick="siguienteCandidato()">❌</button>
+            <button class="btn-accion btn-like" onclick="darLike()">❤️</button>
+        </div>
+    </div>
+
+    <div id="modal-match">
+        <h2>🔥 ¡HAY MATCH! 🔥</h2>
+        <p style="color: #ccc; font-size: 16px;">A esta persona también le gustaste.</p>
+        <a id="link-instagram" href="#" target="_blank" class="btn-ig">Abrir Instagram de su perfil</a>
+        <br><br>
+        <button style="background:transparent; color:#888; border:none; cursor:pointer; text-decoration:underline; font-size:14px; margin-top: 15px;" onclick="cerrarModalMatch()">Seguir buscando</button>
+    </div>
+
+    <script>
+        const supabaseUrl = 'https://vogizootbnhvbeugroyr.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvZ2l6b290Ym5odmJldWdyb3lyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MzY3MTAsImV4cCI6MjA5MDIxMjcxMH0.7dNueBWtcx0nUHjligZl4hS72qqlswuYw0WYR0QeVhI';
+        const client = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+        let usuarioActual = null;
+        let listaCandidatos = [];
+        let indiceActual = 0;
+
+        async function ingresarAlModoMatch() {
+            const dniVal = document.getElementById('input-dni').value.trim();
+            if(dniVal.length !== 8) {
+                alert("⚠️ Ingresá un DNI válido de 8 números.");
+                return;
+            }
+
+            const { data, error } = await client.rpc('validar_acceso_match', { identificador: dniVal });
+
+            if(error || !data || data.length === 0) {
+                alert("🔒 Acceso denegado: O el DNI no existe, o todavía no escaneaste tu QR en la puerta del evento.");
+                return;
+            }
+
+            usuarioActual = data[0];
+            document.getElementById('pantalla-login').style.display = 'none';
+            document.getElementById('pantalla-match').style.display = 'block';
+            document.getElementById('usuario-logueado').innerText = `Hola, ${usuarioActual.nombre} (@${usuarioActual.instagram || 'Sin IG'})`;
+
+            cargarCandidatos();
+        }
+
+        async function cargarCandidatos() {
+            const { data, error } = await client.rpc('obtener_candidatos', { mi_id: usuarioActual.id });
+            
+            if(error) {
+                console.error("Error al buscar candidatos", error);
+                return;
+            }
+
+            listaCandidatos = data || [];
+            indiceActual = 0;
+            mostrarCandidatoActual();
+        }
+
+        function mostrarCandidatoActual() {
+            const tarjeta = document.getElementById('tarjeta-candidato');
+            const botones = document.getElementById('botones-accion');
+
+            if(indiceActual >= listaCandidatos.length) {
+                tarjeta.innerHTML = "<h3>¡No hay más perfiles por ahora! 🎉</h3><p style='color:#666; font-size:13px;'>Volvé a revisar más tarde cuando llegue más gente.</p>";
+                botones.style.display = 'none';
+                return;
+            }
+
+            const candidato = listaCandidatos[indiceActual];
+            botones.style.display = 'flex';
+            tarjeta.innerHTML = `
+                <span style="background:#333; padding:4px 12px; border-radius:20px; font-size:11px; margin-bottom:10px; color:#aaa;">${candidato.tipo_entrada}</span>
+                <h2>${candidato.nombre} ${candidato.apellido}</h2>
+                <p style="color: var(--rosa); font-weight:bold; font-size:16px;">@${candidato.instagram.replace('@','')}</p>
+            `;
+        }
+
+        function siguienteCandidato() {
+            indiceActual++;
+            mostrarCandidatoActual();
+        }
+
+        async function darLike() {
+            const candidato = listaCandidatos[indiceActual];
+            
+            const { data: esMatch, error } = await client.rpc('dar_like', { 
+                mi_id: usuarioActual.id, 
+                objetivo_id: candidato.id 
+            });
+
+            if(!error && esMatch) {
+                const igLimpio = candidato.instagram.replace('@','').trim();
+                document.getElementById('link-instagram').href = `https://instagram.com/${igLimpio}`;
+                document.getElementById('modal-match').style.display = 'flex';
+            }
+
+            siguienteCandidato();
+        }
+
+        function cerrarModalMatch() {
+            document.getElementById('modal-match').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
