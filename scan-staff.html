@@ -150,19 +150,22 @@
             } else if (entrada.ingresado) {
                 mostrarPopup("¡YA INGRESÓ!", "Este ticket ya fue utilizado", "⚠️", "#451a03", "flash-err", `Asistente: ${entrada.nombre} ${entrada.apellido}`, entrada.tipo_entrada);
             } else {
-                // ES LA PRIMERA VEZ QUE ENTRA. MARCAMOS INGRESO Y DISPARAMOS MAIL DEL MATCH.
+                // 1. Marca el ingreso en Supabase (habilita al usuario para el Match)
                 await client.rpc('marcar_ingreso', { ticket_id: entrada.id, pin_seguridad: localStorage.getItem('pin_staff_x') });
+                
+                // 2. Muestra la pantalla verde de Acceso Autorizado al guardia
                 mostrarPopup("ACCESO AUTORIZADO", `${entrada.nombre} ${entrada.apellido}`, "✅", "#022c22", "flash-ok", `DNI: ${entrada.dni}`, entrada.tipo_entrada);
                 actualizarContador(); 
                 
-                // DISPARADOR DE EMAILJS AL ENTRAR A LA FIESTA
-                try {
-                    emailjs.send("service_6r4tg5n", "template_match_x", {
-                        nombre_cliente: entrada.nombre,
-                        email_cliente: entrada.email,
-                        link_match: `https://eventos-x.github.io/eventos-x-tickets/match.html?id=${entrada.id}`
-                    });
-                } catch(e) { console.log("Mail de match demorado", e); }
+                // 3. DISPARA EL MAIL AL INSTANTE (Segundo plano)
+                emailjs.send("service_6r4tg5n", "template_match_x", {
+                    nombre_cliente: entrada.nombre,
+                    email_cliente: entrada.email,
+                    link_match: `https://eventos-x.github.io/eventos-x-tickets/match.html?id=${entrada.id}`
+                }).then(
+                    function(response) { console.log("Mail enviado al instante a: " + entrada.email); },
+                    function(error) { console.error("Error al enviar el mail: ", error); }
+                );
             }
         }
 
