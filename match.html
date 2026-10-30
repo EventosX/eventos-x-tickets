@@ -8,42 +8,64 @@
     <style>
         :root { --azul: #3b82f6; --fondo: #0a0a0a; --caja: #161616; --rosa: #ec4899; --verde: #10b981; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--fondo); color: white; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }
-        .container { background: var(--caja); padding: 30px; border-radius: 20px; border: 1px solid #333; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
-        h1 { font-size: 24px; letter-spacing: 1px; margin-bottom: 10px; }
-        h1 span { color: var(--rosa); }
-        input { width: 100%; padding: 14px; margin-bottom: 15px; background: #0a0a0a; border: 1px solid #333; color: white; border-radius: 10px; font-size: 16px; text-align: center; box-sizing: border-box; }
-        input:focus { outline: none; border-color: var(--rosa); }
-        .btn { background: var(--rosa); color: white; border: none; padding: 14px; width: 100%; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; text-transform: uppercase; transition: 0.3s; }
-        .btn:hover { opacity: 0.9; transform: translateY(-2px); }
+        .container { background: var(--caja); padding: 30px; border-radius: 20px; border: 1px solid #333; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.8); display: none; }
+        .container.active { display: block; }
         
-        #pantalla-match { display: none; }
-        .card-perfil { background: #1a1a1a; border: 1px solid #333; border-radius: 15px; padding: 25px; margin-bottom: 20px; min-height: 180px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        h1 { font-size: 24px; letter-spacing: 1px; margin-bottom: 10px; margin-top: 0; }
+        h1 span { color: var(--rosa); }
+        input, select { width: 100%; padding: 14px; margin-bottom: 15px; background: #0a0a0a; border: 1px solid #333; color: white; border-radius: 10px; font-size: 16px; text-align: center; box-sizing: border-box; }
+        input:focus, select:focus { outline: none; border-color: var(--rosa); }
+        .btn { background: var(--rosa); color: white; border: none; padding: 14px; width: 100%; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; text-transform: uppercase; transition: 0.3s; margin-bottom: 10px; }
+        .btn:hover { opacity: 0.9; transform: translateY(-2px); }
+        .btn-outline { background: transparent; color: #888; border: 1px solid #444; }
+        
+        .card-perfil { background: #1a1a1a; border: 1px solid #333; border-radius: 15px; padding: 25px; margin-bottom: 20px; min-height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         .card-perfil h2 { margin: 0 0 10px 0; font-size: 26px; color: white; }
         .acciones { display: flex; gap: 15px; }
-        .btn-accion { flex: 1; padding: 15px; border-radius: 12px; font-weight: bold; font-size: 18px; cursor: pointer; border: none; transition: 0.2s; }
+        .btn-accion { flex: 1; padding: 15px; border-radius: 12px; font-weight: bold; font-size: 22px; cursor: pointer; border: none; transition: 0.2s; }
         .btn-pasar { background: #222; color: #ef4444; border: 1px solid #ef4444; }
         .btn-like { background: var(--verde); color: #000; }
         
-        #modal-match { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 1000; justify-content: center; align-items: center; padding: 20px; flex-direction: column; text-align: center; }
-        #modal-match h2 { font-size: 32px; color: var(--rosa); margin-bottom: 10px; }
-        .btn-ig { background: #E1306C; color: white; text-decoration: none; padding: 15px 30px; border-radius: 12px; font-weight: bold; display: inline-block; margin-top: 20px; font-size: 16px; }
+        #modal-match { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 1000; justify-content: center; align-items: center; padding: 20px; flex-direction: column; text-align: center; }
+        #modal-match h2 { font-size: 36px; color: var(--rosa); margin-bottom: 10px; text-shadow: 0 0 20px rgba(236,72,153,0.5); }
+        .btn-ig { background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%); color: white; text-decoration: none; padding: 15px 30px; border-radius: 12px; font-weight: bold; display: inline-block; margin-top: 20px; font-size: 16px; width: 100%; box-sizing: border-box; }
     </style>
 </head>
 <body>
 
-    <div class="container" id="pantalla-login">
-        <h1>TINDER <span>X</span></h1>
-        <p style="color: #888; font-size: 13px; margin-bottom: 20px;">Ingresá a la fiesta para activar el modo match.</p>
+    <!-- Pantalla 1: Login por DNI (Solo se ve si no entra por el link del mail) -->
+    <div class="container active" id="pantalla-login">
+        <h1>MATCH <span>X</span></h1>
+        <p style="color: #888; font-size: 14px; margin-bottom: 20px; line-height:1.5;">Si ya estás adentro de la fiesta, ingresá tu DNI para desbloquear la experiencia.</p>
         <input type="text" id="input-dni" placeholder="Tu DNI (8 números)" maxlength="8" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
-        <button class="btn" onclick="ingresarAlModoMatch()">Entrar al Modo Match</button>
+        <button class="btn" id="btn-login-manual" onclick="loginManual()">Ingresar</button>
     </div>
 
+    <!-- Pantalla 2: Onboarding (Preferencias) -->
+    <div class="container" id="pantalla-onboarding">
+        <h1>MATCH <span>X</span></h1>
+        <p style="color: #ccc; font-size: 14px; margin-bottom: 25px;">Completá tu perfil para ver quién más está buscando conocer gente hoy.</p>
+        
+        <input type="text" id="input-ig" placeholder="Tu @instagram" oninput="this.value = this.value.replace(/[^a-zA-Z0-9._]/g, '');" required>
+        
+        <select id="select-interes" required>
+            <option value="" disabled selected>¿A quién querés conocer?</option>
+            <option value="Mujeres">Mujeres</option>
+            <option value="Hombres">Hombres</option>
+            <option value="Ambos">Ambos</option>
+        </select>
+
+        <button class="btn" onclick="activarPerfil()">Activar Perfil y Entrar</button>
+        <button class="btn btn-outline" onclick="rechazarMatch()">No busco nada, gracias</button>
+    </div>
+
+    <!-- Pantalla 3: El Tinder -->
     <div class="container" id="pantalla-match">
         <h1>MATCH <span>X</span></h1>
         <p style="color: #888; font-size: 12px; margin-bottom: 20px;" id="usuario-logueado"></p>
         
         <div class="card-perfil" id="tarjeta-candidato">
-            <p style="color: #666;">Buscando personas en la fiesta...</p>
+            <p style="color: #666;">Buscando personas...</p>
         </div>
 
         <div class="acciones" id="botones-accion" style="display: none;">
@@ -52,12 +74,14 @@
         </div>
     </div>
 
+    <!-- Popup Match -->
     <div id="modal-match">
         <h2>🔥 ¡HAY MATCH! 🔥</h2>
-        <p style="color: #ccc; font-size: 16px;">A esta persona también le gustaste.</p>
-        <a id="link-instagram" href="#" target="_blank" class="btn-ig">Abrir Instagram de su perfil</a>
+        <p style="color: #ccc; font-size: 16px; margin-bottom: 5px;">A esta persona también le gustaste.</p>
+        <p style="color: #888; font-size: 13px; margin-bottom: 20px;">Hablá con seguridad y respeto.</p>
+        <a id="link-instagram" href="#" target="_blank" class="btn-ig">Abrir su Instagram</a>
         <br><br>
-        <button style="background:transparent; color:#888; border:none; cursor:pointer; text-decoration:underline; font-size:14px; margin-top: 15px;" onclick="cerrarModalMatch()">Seguir buscando</button>
+        <button style="background:transparent; color:#888; border:none; cursor:pointer; text-decoration:underline; font-size:14px; margin-top: 15px;" onclick="cerrarModalMatch()">Seguir deslizando</button>
     </div>
 
     <script>
@@ -69,39 +93,82 @@
         let listaCandidatos = [];
         let indiceActual = 0;
 
-        async function ingresarAlModoMatch() {
-            const dniVal = document.getElementById('input-dni').value.trim();
-            if(dniVal.length !== 8) {
-                alert("⚠️ Ingresá un DNI válido de 8 números.");
-                return;
+        // Auto-login al abrir desde el mail
+        window.onload = async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const ticketId = urlParams.get('id');
+            if (ticketId) {
+                document.getElementById('pantalla-login').classList.remove('active');
+                await validarUsuario(ticketId);
             }
+        };
 
-            const { data, error } = await client.rpc('validar_acceso_match', { identificador: dniVal });
+        async function loginManual() {
+            const dniVal = document.getElementById('input-dni').value.trim();
+            if(dniVal.length !== 8) { alert("DNI inválido"); return; }
+            document.getElementById('btn-login-manual').innerText = "Buscando...";
+            await validarUsuario(dniVal);
+        }
 
-            if(error || !data || data.length === 0) {
-                alert("🔒 Acceso denegado: O el DNI no existe, o todavía no escaneaste tu QR en la puerta del evento.");
+        async function validarUsuario(identificador) {
+            const { data, error } = await client.rpc('validar_acceso_match', { identificador: identificador });
+            
+            if (error || !data || data.length === 0) {
+                alert("🔒 Todavía no ingresaste a la fiesta o el código es inválido.");
+                document.getElementById('btn-login-manual').innerText = "Ingresar";
+                document.getElementById('pantalla-login').classList.add('active');
                 return;
             }
 
             usuarioActual = data[0];
-            document.getElementById('pantalla-login').style.display = 'none';
-            document.getElementById('pantalla-match').style.display = 'block';
-            document.getElementById('usuario-logueado').innerText = `Hola, ${usuarioActual.nombre} (@${usuarioActual.instagram || 'Sin IG'})`;
+            
+            // Si ya activó el match antes, salta directo al juego
+            if (usuarioActual.busca_match && usuarioActual.instagram) {
+                iniciarTinder();
+            } else {
+                document.getElementById('pantalla-login').classList.remove('active');
+                document.getElementById('pantalla-onboarding').classList.add('active');
+            }
+        }
 
+        async function activarPerfil() {
+            const ig = document.getElementById('input-ig').value.trim();
+            const interes = document.getElementById('select-interes').value;
+            
+            if(!ig || !interes) { alert("Completa los dos campos para avanzar."); return; }
+
+            const { error } = await client.rpc('activar_perfil_match', { 
+                p_ticket_id: usuarioActual.id, 
+                p_instagram: ig, 
+                p_interes: interes 
+            });
+
+            if(!error) {
+                usuarioActual.instagram = ig;
+                usuarioActual.busca_match = true;
+                iniciarTinder();
+            } else { alert("Error al guardar perfil."); }
+        }
+
+        function rechazarMatch() {
+            document.getElementById('pantalla-onboarding').innerHTML = "<h2 style='color:#10b981;'>¡A disfrutar! 🪩</h2><p style='color:#888;'>Cerrá esta ventana y andá a la pista.</p>";
+        }
+
+        function iniciarTinder() {
+            document.getElementById('pantalla-login').classList.remove('active');
+            document.getElementById('pantalla-onboarding').classList.remove('active');
+            document.getElementById('pantalla-match').classList.add('active');
+            document.getElementById('usuario-logueado').innerText = `Tu perfil: @${usuarioActual.instagram}`;
             cargarCandidatos();
         }
 
         async function cargarCandidatos() {
             const { data, error } = await client.rpc('obtener_candidatos', { mi_id: usuarioActual.id });
-            
-            if(error) {
-                console.error("Error al buscar candidatos", error);
-                return;
+            if(!error) {
+                listaCandidatos = data || [];
+                indiceActual = 0;
+                mostrarCandidatoActual();
             }
-
-            listaCandidatos = data || [];
-            indiceActual = 0;
-            mostrarCandidatoActual();
         }
 
         function mostrarCandidatoActual() {
@@ -109,7 +176,7 @@
             const botones = document.getElementById('botones-accion');
 
             if(indiceActual >= listaCandidatos.length) {
-                tarjeta.innerHTML = "<h3>¡No hay más perfiles por ahora! 🎉</h3><p style='color:#666; font-size:13px;'>Volvé a revisar más tarde cuando llegue más gente.</p>";
+                tarjeta.innerHTML = "<h3>¡No hay más perfiles por ahora! 🎉</h3><p style='color:#666; font-size:13px;'>Volvé a revisar más tarde cuando se active más gente.</p>";
                 botones.style.display = 'none';
                 return;
             }
@@ -119,35 +186,24 @@
             tarjeta.innerHTML = `
                 <span style="background:#333; padding:4px 12px; border-radius:20px; font-size:11px; margin-bottom:10px; color:#aaa;">${candidato.tipo_entrada}</span>
                 <h2>${candidato.nombre} ${candidato.apellido}</h2>
-                <p style="color: var(--rosa); font-weight:bold; font-size:16px;">@${candidato.instagram.replace('@','')}</p>
+                <p style="color: #666; font-size:14px; margin-top:5px;">En la fiesta 🪩</p>
             `;
         }
 
-        function siguienteCandidato() {
-            indiceActual++;
-            mostrarCandidatoActual();
-        }
+        function siguienteCandidato() { indiceActual++; mostrarCandidatoActual(); }
 
         async function darLike() {
             const candidato = listaCandidatos[indiceActual];
-            
-            const { data: esMatch, error } = await client.rpc('dar_like', { 
-                mi_id: usuarioActual.id, 
-                objetivo_id: candidato.id 
-            });
+            const { data: esMatch, error } = await client.rpc('dar_like', { mi_id: usuarioActual.id, objetivo_id: candidato.id });
 
             if(!error && esMatch) {
-                const igLimpio = candidato.instagram.replace('@','').trim();
-                document.getElementById('link-instagram').href = `https://instagram.com/${igLimpio}`;
+                document.getElementById('link-instagram').href = `https://instagram.com/${candidato.instagram.replace('@','')}`;
                 document.getElementById('modal-match').style.display = 'flex';
             }
-
             siguienteCandidato();
         }
 
-        function cerrarModalMatch() {
-            document.getElementById('modal-match').style.display = 'none';
-        }
+        function cerrarModalMatch() { document.getElementById('modal-match').style.display = 'none'; }
     </script>
 </body>
 </html>
