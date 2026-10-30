@@ -76,7 +76,7 @@
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvZ2l6b290Ym5odmJldWdyb3lyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MzY3MTAsImV4cCI6MjA5MDIxMjcxMH0.7dNueBWtcx0nUHjligZl4hS72qqlswuYw0WYR0QeVhI';
         const client = window.supabase.createClient(supabaseUrl, supabaseKey);
         
-        // INICIALIZAMOS EMAILJS CON TU CLAVE PÚBLICA
+        // INICIALIZAMOS EMAILJS
         emailjs.init("fTAOcJXUAi8-UKPu2"); 
 
         let escaneando = true;
@@ -157,8 +157,8 @@
                 mostrarPopup("ACCESO AUTORIZADO", `${entrada.nombre} ${entrada.apellido}`, "✅", "#022c22", "flash-ok", `DNI: ${entrada.dni}`, entrada.tipo_entrada);
                 actualizarContador(); 
                 
-                // 3. DISPARA EL MAIL AL INSTANTE (Segundo plano)
-                emailjs.send("service_6r4tg5n", "template_match_x", {
+                // 3. DISPARA EL MAIL AL INSTANTE USANDO EL TEMPLATE CORRECTO
+                emailjs.send("service_6r4tg5n", "template_5xk3zup", {
                     nombre_cliente: entrada.nombre,
                     email_cliente: entrada.email,
                     link_match: `https://eventos-x.github.io/eventos-x-tickets/match.html?id=${entrada.id}`
