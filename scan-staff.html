@@ -5,41 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Eventos X - Scan Staff</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         :root { --azul: #3b82f6; --rojo: #ef4444; --verde: #10b981; --fondo: #0a0a0a; --caja: #161616; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--fondo); color: white; margin: 0; text-align: center; overflow-x: hidden; }
-        
         #login-screen { position: fixed; inset: 0; background: var(--fondo); z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; }
         .input-pin { background: var(--caja); border: 1px solid #333; color: white; padding: 15px; font-size: 16px; border-radius: 12px; width: 100%; max-width: 280px; text-align: center; margin-bottom: 20px; transition: 0.3s; }
         .input-pin:focus { outline: none; border-color: var(--azul); }
-        .btn-pin { background: var(--azul); color: white; border: none; padding: 15px 40px; border-radius: 12px; font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; width: 100%; max-width: 280px; transition: 0.3s; }
-
+        .btn-pin { background: var(--azul); color: white; border: none; padding: 15px 40px; border-radius: 12px; font-weight: bold; cursor: pointer; text-transform: uppercase; width: 100%; max-width: 280px; transition: 0.3s; }
         .header { padding: 15px 20px; background: #111; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; }
         h1 { margin: 0; font-size: 20px; letter-spacing: 2px; }
         h1 span { color: var(--azul); }
-        .contador-badge { background: #222; border: 1px solid #444; padding: 8px 15px; border-radius: 20px; font-size: 14px; font-weight: bold; color: var(--verde); letter-spacing: 1px; }
-
+        .contador-badge { background: #222; border: 1px solid #444; padding: 8px 15px; border-radius: 20px; font-size: 14px; font-weight: bold; color: var(--verde); }
         #reader { width: 100%; max-width: 500px; margin: 0 auto; border: none; }
-        
         .manual-search { background: var(--caja); padding: 20px; margin: 15px auto; width: 90%; max-width: 460px; border-radius: 15px; border: 1px solid #333; box-sizing: border-box; }
-        .manual-search p { margin: 0 0 10px 0; font-size: 13px; color: #888; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; }
+        .manual-search p { margin: 0 0 10px 0; font-size: 13px; color: #888; text-transform: uppercase; font-weight: bold; }
         .search-row { display: flex; gap: 10px; }
         .input-dni { flex: 1; background: #0a0a0a; border: 1px solid #333; color: white; padding: 12px; border-radius: 8px; font-size: 16px; text-align: center; }
-        .input-dni:focus { outline: none; border-color: var(--azul); }
         .btn-buscar { background: #333; color: white; border: none; padding: 0 20px; border-radius: 8px; font-weight: bold; cursor: pointer; text-transform: uppercase; transition: 0.3s; }
         .btn-buscar:hover { background: var(--azul); }
-
         #resultado { position: fixed; bottom: 0; left: 0; right: 0; height: 65%; background: var(--caja); border-radius: 30px 30px 0 0; padding: 30px 20px; display: none; z-index: 100; box-shadow: 0 -10px 50px rgba(0,0,0,0.9); flex-direction: column; align-items: center; justify-content: center; }
         #res-icono { font-size: 60px; margin-bottom: 10px; }
         #res-titulo { font-size: 24px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 15px; text-align: center; }
-        #res-tipo-entrada { display: inline-block; background: #fff; color: #000; padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 14px; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px; }
+        #res-tipo-entrada { display: inline-block; background: #fff; color: #000; padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 14px; margin-bottom: 15px; text-transform: uppercase; }
         #res-info { font-size: 18px; font-weight: 600; margin-bottom: 5px; text-align: center; line-height: 1.4; }
-        #res-dni { color: #aaa; font-size: 16px; font-family: monospace; letter-spacing: 1px; text-align: center; margin-top: 10px; }
-        
-        .btn-next { background: #111; color: white; border: 1px solid #333; padding: 18px 40px; border-radius: 12px; margin-top: 25px; font-weight: bold; cursor: pointer; text-transform: uppercase; width: 100%; max-width: 300px; letter-spacing: 1px; }
+        #res-dni { color: #aaa; font-size: 16px; font-family: monospace; text-align: center; margin-top: 10px; }
+        .btn-next { background: #111; color: white; border: 1px solid #333; padding: 18px 40px; border-radius: 12px; margin-top: 25px; font-weight: bold; cursor: pointer; text-transform: uppercase; width: 100%; max-width: 300px; }
         .btn-logout { background: transparent; color: #888; border: 1px solid #444; padding: 5px 10px; border-radius: 8px; font-size: 10px; font-weight: bold; margin-left: 10px; cursor: pointer; }
-        
         .flash-ok { animation: flashG 0.5s; }
         .flash-err { animation: flashR 0.5s; }
         @keyframes flashG { 0% { background: var(--verde); } 100% { background: var(--fondo); } }
@@ -47,7 +40,6 @@
     </style>
 </head>
 <body>
-
     <div id="login-screen">
         <h1 style="margin-bottom: 20px;">STAFF <span>X</span></h1>
         <p style="color: #666; font-size: 14px; margin-bottom: 20px; text-transform: uppercase;">Control de Acceso</p>
@@ -60,13 +52,11 @@
             <h1>STAFF <span>X</span> <button class="btn-logout" onclick="cerrarSesion()">Salir</button></h1>
             <div class="contador-badge" id="txt-contador">0 / 0</div>
         </div>
-        
         <div id="reader"></div>
-
         <div class="manual-search">
             <p>¿Falla el QR? Búsqueda manual</p>
             <div class="search-row">
-                <input type="text" id="dni-manual" class="input-dni" placeholder="Ingresar DNI (8 números)" maxlength="8" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+                <input type="text" id="dni-manual" class="input-dni" placeholder="Ingresar DNI" maxlength="8">
                 <button class="btn-buscar" onclick="buscarPorDNI()">Buscar</button>
             </div>
         </div>
@@ -85,45 +75,32 @@
         const supabaseUrl = 'https://vogizootbnhvbeugroyr.supabase.co';
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvZ2l6b290Ym5odmJldWdyb3lyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MzY3MTAsImV4cCI6MjA5MDIxMjcxMH0.7dNueBWtcx0nUHjligZl4hS72qqlswuYw0WYR0QeVhI';
         const client = window.supabase.createClient(supabaseUrl, supabaseKey);
+        
+        // INICIALIZAMOS EMAILJS CON TU CLAVE PÚBLICA
+        emailjs.init("fTAOcJXUAi8-UKPu2"); 
 
         let escaneando = true;
 
-        // Al abrir, chequea silenciosamente si el PIN guardado sigue siendo válido en la base
         window.onload = async () => {
             const pinGuardado = localStorage.getItem('pin_staff_x');
             if(pinGuardado) {
                 const { error } = await client.rpc('get_contadores', { pin_seguridad: pinGuardado });
-                if(!error) {
-                    iniciarScanner();
-                } else {
-                    localStorage.removeItem('pin_staff_x');
-                }
+                if(!error) iniciarScanner();
+                else localStorage.removeItem('pin_staff_x');
             }
         }
 
-        // Ahora verificamos el PIN golpeando la puerta de Supabase
         async function checkPin() {
             const inputVal = document.getElementById('pinInput').value.trim();
             const btn = document.getElementById('btn-login');
-            
             if(!inputVal) return;
-
-            btn.innerText = "Verificando...";
-            btn.disabled = true;
-            btn.style.opacity = "0.5";
+            btn.innerText = "Verificando..."; btn.disabled = true;
             
-            // Intentamos usar el PIN ingresado para leer los contadores
             const { error } = await client.rpc('get_contadores', { pin_seguridad: inputVal });
-            
             if(error) {
-                // Supabase nos rebotó
                 alert("❌ PIN INCORRECTO. Acceso denegado.");
-                document.getElementById('pinInput').value = ""; 
-                btn.innerText = "Entrar al Escáner";
-                btn.disabled = false;
-                btn.style.opacity = "1";
+                document.getElementById('pinInput').value = ""; btn.innerText = "Entrar al Escáner"; btn.disabled = false;
             } else {
-                // Supabase aceptó el PIN
                 localStorage.setItem('pin_staff_x', inputVal);
                 iniciarScanner();
             }
@@ -132,133 +109,77 @@
         function iniciarScanner() {
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('main-interface').style.display = 'block';
-            actualizarContador();
-            startScanner();
+            actualizarContador(); startScanner();
         }
 
-        function cerrarSesion() {
-            localStorage.removeItem('pin_staff_x');
-            location.reload();
-        }
+        function cerrarSesion() { localStorage.removeItem('pin_staff_x'); location.reload(); }
 
         async function actualizarContador() {
             try {
-                const pinGuardado = localStorage.getItem('pin_staff_x');
-                const { data, error } = await client.rpc('get_contadores', { pin_seguridad: pinGuardado });
-                if (error) throw error;
+                const { data } = await client.rpc('get_contadores', { pin_seguridad: localStorage.getItem('pin_staff_x') });
                 document.getElementById('txt-contador').innerText = `${data.ingresados || 0} / ${data.vendidas || 0}`;
-            } catch (e) {
-                console.error("Error contador", e);
-            }
+            } catch (e) {}
         }
 
         async function onScanSuccess(decodedText) {
             if (!escaneando) return;
             prepararValidacion();
-
             try {
-                const pinGuardado = localStorage.getItem('pin_staff_x');
-                const { data, error } = await client.rpc('buscar_ticket_id', { ticket_id: decodedText, pin_seguridad: pinGuardado });
-                
-                const entrada = data && data.length > 0 ? data[0] : null;
-                procesarResultado(entrada, error);
-            } catch (e) { 
-                procesarResultado(null, true);
-            }
+                const { data, error } = await client.rpc('buscar_ticket_id', { ticket_id: decodedText, pin_seguridad: localStorage.getItem('pin_staff_x') });
+                procesarResultado(data && data.length > 0 ? data[0] : null, error);
+            } catch (e) { procesarResultado(null, true); }
         }
 
         async function buscarPorDNI() {
             if (!escaneando) return;
             const dniIngresado = document.getElementById('dni-manual').value;
-            
-            if (dniIngresado.length !== 8) { 
-                alert("⚠️ El DNI debe contener exactamente 8 números."); 
-                return; 
-            }
-            
+            if (dniIngresado.length !== 8) { alert("⚠️ DNI inválido."); return; }
             prepararValidacion();
-
             try {
-                const pinGuardado = localStorage.getItem('pin_staff_x');
-                const { data, error } = await client.rpc('buscar_ticket_dni', { dni_buscado: dniIngresado, pin_seguridad: pinGuardado });
-                
-                const entrada = data && data.length > 0 ? data[0] : null;
-                procesarResultado(entrada, error);
+                const { data, error } = await client.rpc('buscar_ticket_dni', { dni_buscado: dniIngresado, pin_seguridad: localStorage.getItem('pin_staff_x') });
+                procesarResultado(data && data.length > 0 ? data[0] : null, error);
                 document.getElementById('dni-manual').value = ""; 
-            } catch (e) { errorConexion(); }
+            } catch (e) { alert("⚠️ Error de red"); escaneando = true; }
         }
 
         async function procesarResultado(entrada, error) {
             if (error || !entrada) {
-                mostrarPopup("TICKET INVÁLIDO", "No se encuentra en la base de datos.", "❌", "#450a0a", "flash-err", "", "");
+                mostrarPopup("TICKET INVÁLIDO", "No se encuentra en la base.", "❌", "#450a0a", "flash-err", "", "");
             } else if (entrada.estado_pago !== 'aprobado') {
                 mostrarPopup("PAGO PENDIENTE", "Esta entrada no está pagada", "❌", "#450a0a", "flash-err", `Asistente: ${entrada.nombre} ${entrada.apellido}`, entrada.tipo_entrada);
             } else if (entrada.ingresado) {
-                const fechaObj = new Date(entrada.fecha_ingreso);
-                const fechaStr = fechaObj.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                const horaStr = fechaObj.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
-                mostrarPopup("¡YA INGRESÓ!", `Ingresó el ${fechaStr}\na las ${horaStr} hs`, "⚠️", "#451a03", "flash-err", `Asistente: ${entrada.nombre} ${entrada.apellido}`, entrada.tipo_entrada);
+                mostrarPopup("¡YA INGRESÓ!", "Este ticket ya fue utilizado", "⚠️", "#451a03", "flash-err", `Asistente: ${entrada.nombre} ${entrada.apellido}`, entrada.tipo_entrada);
             } else {
-                const pinGuardado = localStorage.getItem('pin_staff_x');
-                await client.rpc('marcar_ingreso', { ticket_id: entrada.id, pin_seguridad: pinGuardado });
+                // ES LA PRIMERA VEZ QUE ENTRA. MARCAMOS INGRESO Y DISPARAMOS MAIL DEL MATCH.
+                await client.rpc('marcar_ingreso', { ticket_id: entrada.id, pin_seguridad: localStorage.getItem('pin_staff_x') });
                 mostrarPopup("ACCESO AUTORIZADO", `${entrada.nombre} ${entrada.apellido}`, "✅", "#022c22", "flash-ok", `DNI: ${entrada.dni}`, entrada.tipo_entrada);
                 actualizarContador(); 
+                
+                // DISPARADOR DE EMAILJS AL ENTRAR A LA FIESTA
+                try {
+                    emailjs.send("service_6r4tg5n", "template_match_x", {
+                        nombre_cliente: entrada.nombre,
+                        email_cliente: entrada.email,
+                        link_match: `https://eventos-x.github.io/eventos-x-tickets/match.html?id=${entrada.id}`
+                    });
+                } catch(e) { console.log("Mail de match demorado", e); }
             }
         }
 
-        function prepararValidacion() {
-            escaneando = false; 
-            document.getElementById('reader').style.opacity = '0.3';
-        }
-
-        function errorConexion() {
-            alert("⚠️ Error de conexión. Reintente.");
-            escaneando = true; 
-            document.getElementById('reader').style.opacity = '1';
-        }
-
+        function prepararValidacion() { escaneando = false; document.getElementById('reader').style.opacity = '0.3'; }
         function mostrarPopup(tit, info, ico, bg, flash, dni, tipo) {
             document.body.classList.add(flash);
             const res = document.getElementById('resultado');
-            
-            res.style.display = 'flex';
-            res.style.background = bg;
-            document.getElementById('res-icono').innerText = ico;
-            document.getElementById('res-titulo').innerText = tit;
-            document.getElementById('res-info').innerText = info;
-            document.getElementById('res-dni').innerText = dni;
-
-            const etiquetaTipo = document.getElementById('res-tipo-entrada');
-            if(tipo) {
-                etiquetaTipo.style.display = 'inline-block';
-                etiquetaTipo.innerText = tipo;
-                if(tipo.toUpperCase().includes('VIP')) {
-                    etiquetaTipo.style.background = '#eab308';
-                    etiquetaTipo.style.color = '#000';
-                } else {
-                    etiquetaTipo.style.background = '#fff';
-                    etiquetaTipo.style.color = '#000';
-                }
-            } else {
-                etiquetaTipo.style.display = 'none';
-            }
-
+            res.style.display = 'flex'; res.style.background = bg;
+            document.getElementById('res-icono').innerText = ico; document.getElementById('res-titulo').innerText = tit;
+            document.getElementById('res-info').innerText = info; document.getElementById('res-dni').innerText = dni;
+            const et = document.getElementById('res-tipo-entrada');
+            if(tipo) { et.style.display = 'inline-block'; et.innerText = tipo; et.style.background = tipo.includes('VIP') ? '#eab308' : '#fff'; et.style.color = '#000'; } 
+            else { et.style.display = 'none'; }
             setTimeout(() => document.body.classList.remove(flash), 500);
         }
-
-        function cerrarResultado() {
-            document.getElementById('resultado').style.display = 'none';
-            document.getElementById('reader').style.opacity = '1';
-            setTimeout(() => { escaneando = true; }, 1000);
-        }
-
-        function startScanner() {
-            const html5QrCode = new Html5Qrcode("reader");
-            html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess).catch(err => {
-                console.error("Error al iniciar cámara:", err);
-                document.getElementById('reader').innerHTML = "<p style='padding:20px; color:#888;'>Cámara no disponible. Usá el buscador manual.</p>";
-            });
-        }
+        function cerrarResultado() { document.getElementById('resultado').style.display = 'none'; document.getElementById('reader').style.opacity = '1'; setTimeout(() => { escaneando = true; }, 1000); }
+        function startScanner() { const html5QrCode = new Html5Qrcode("reader"); html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess).catch(err => { document.getElementById('reader').innerHTML = "<p style='padding:20px; color:#888;'>Cámara no disponible. Usá el buscador manual.</p>"; }); }
     </script>
 </body>
 </html>
