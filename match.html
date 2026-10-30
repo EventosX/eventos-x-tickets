@@ -1,108 +1,153 @@
--- 1. TABLA ENTRADAS (Agregamos la columna instagram si no existe)
-CREATE TABLE IF NOT EXISTS public.entradas (
-    id UUID PRIMARY KEY,
-    nombre TEXT NOT NULL,
-    apellido TEXT NOT NULL,
-    dni TEXT NOT NULL CONSTRAINT dni_unico_v2 UNIQUE,
-    email TEXT NOT NULL,
-    tipo_entrada TEXT NOT NULL,
-    ingresado BOOLEAN DEFAULT false,
-    id_venta UUID,
-    estado_pago TEXT DEFAULT 'pendiente',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    fecha_ingreso TIMESTAMPTZ,
-    puntuacion INT,
-    instagram TEXT
-);
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eventos X - Modo Match</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root { --azul: #3b82f6; --fondo: #0a0a0a; --caja: #161616; --rosa: #ec4899; --verde: #10b981; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--fondo); color: white; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }
+        .container { background: var(--caja); padding: 30px; border-radius: 20px; border: 1px solid #333; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+        h1 { font-size: 24px; letter-spacing: 1px; margin-bottom: 10px; }
+        h1 span { color: var(--rosa); }
+        input { width: 100%; padding: 14px; margin-bottom: 15px; background: #0a0a0a; border: 1px solid #333; color: white; border-radius: 10px; font-size: 16px; text-align: center; box-sizing: border-box; }
+        input:focus { outline: none; border-color: var(--rosa); }
+        .btn { background: var(--rosa); color: white; border: none; padding: 14px; width: 100%; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; text-transform: uppercase; transition: 0.3s; }
+        .btn:hover { opacity: 0.9; transform: translateY(-2px); }
+        
+        #pantalla-match { display: none; }
+        .card-perfil { background: #1a1a1a; border: 1px solid #333; border-radius: 15px; padding: 25px; margin-bottom: 20px; min-height: 180px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .card-perfil h2 { margin: 0 0 10px 0; font-size: 26px; color: white; }
+        .acciones { display: flex; gap: 15px; }
+        .btn-accion { flex: 1; padding: 15px; border-radius: 12px; font-weight: bold; font-size: 18px; cursor: pointer; border: none; transition: 0.2s; }
+        .btn-pasar { background: #222; color: #ef4444; border: 1px solid #ef4444; }
+        .btn-like { background: var(--verde); color: #000; }
+        
+        #modal-match { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 1000; justify-content: center; align-items: center; padding: 20px; flex-direction: column; text-align: center; }
+        #modal-match h2 { font-size: 32px; color: var(--rosa); margin-bottom: 10px; }
+        .btn-ig { background: #E1306C; color: white; text-decoration: none; padding: 15px 30px; border-radius: 12px; font-weight: bold; display: inline-block; margin-top: 20px; font-size: 16px; }
+    </style>
+</head>
+<body>
 
-ALTER TABLE public.entradas ADD COLUMN IF NOT EXISTS instagram TEXT;
+    <div class="container" id="pantalla-login">
+        <h1>TINDER <span>X</span></h1>
+        <p style="color: #888; font-size: 13px; margin-bottom: 20px;">Ingresá a la fiesta para activar el modo match.</p>
+        <input type="text" id="input-dni" placeholder="Tu DNI (8 números)" maxlength="8" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+        <button class="btn" onclick="ingresarAlModoMatch()">Entrar al Modo Match</button>
+    </div>
 
-ALTER TABLE public.entradas ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permitir insertar entradas publicamente" ON public.entradas;
-CREATE POLICY "Permitir insertar entradas publicamente" ON public.entradas FOR INSERT TO anon, authenticated WITH CHECK (true);
-GRANT INSERT, SELECT, UPDATE ON TABLE public.entradas TO anon, authenticated;
+    <div class="container" id="pantalla-match">
+        <h1>MATCH <span>X</span></h1>
+        <p style="color: #888; font-size: 12px; margin-bottom: 20px;" id="usuario-logueado"></p>
+        
+        <div class="card-perfil" id="tarjeta-candidato">
+            <p style="color: #666;">Buscando personas en la fiesta...</p>
+        </div>
 
--- 2. TABLA LIKES (Nueva para el Modo Match)
-CREATE TABLE IF NOT EXISTS public.likes (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    de_ticket_id UUID REFERENCES public.entradas(id) ON DELETE CASCADE,
-    para_ticket_id UUID REFERENCES public.entradas(id) ON DELETE CASCADE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT unico_like UNIQUE (de_ticket_id, para_ticket_id)
-);
+        <div class="acciones" id="botones-accion" style="display: none;">
+            <button class="btn-accion btn-pasar" onclick="siguienteCandidato()">❌</button>
+            <button class="btn-accion btn-like" onclick="darLike()">❤️</button>
+        </div>
+    </div>
 
-ALTER TABLE public.likes ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permitir gestion publica de likes" ON public.likes;
-CREATE POLICY "Permitir gestion publica de likes" ON public.likes FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-GRANT ALL ON TABLE public.likes TO anon, authenticated;
+    <div id="modal-match">
+        <h2>🔥 ¡HAY MATCH! 🔥</h2>
+        <p style="color: #ccc; font-size: 16px;">A esta persona también le gustaste.</p>
+        <a id="link-instagram" href="#" target="_blank" class="btn-ig">Abrir Instagram de su perfil</a>
+        <br><br>
+        <button style="background:transparent; color:#888; border:none; cursor:pointer; text-decoration:underline; font-size:14px; margin-top: 15px;" onclick="cerrarModalMatch()">Seguir buscando</button>
+    </div>
 
--- 3. FUNCIONES DEL SISTEMA BASE (Ventas, Admin y Escáner)
-CREATE OR REPLACE FUNCTION get_pendientes(pin_seguridad TEXT) RETURNS SETOF public.entradas LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-  IF pin_seguridad = '43fn2e1_$3' THEN RETURN QUERY SELECT * FROM public.entradas WHERE estado_pago = 'pendiente' ORDER BY created_at DESC; ELSE RAISE EXCEPTION 'PIN Incorrecto'; END IF;
-END; $$;
+    <script>
+        const supabaseUrl = 'https://vogizootbnhvbeugroyr.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvZ2l6b290Ym5odmJldWdyb3lyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MzY3MTAsImV4cCI6MjA5MDIxMjcxMH0.7dNueBWtcx0nUHjligZl4hS72qqlswuYw0WYR0QeVhI';
+        const client = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-CREATE OR REPLACE FUNCTION aprobar_ticket(ticket_id UUID, pin_seguridad TEXT) RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-  IF pin_seguridad = '43fn2e1_$3' THEN UPDATE public.entradas SET estado_pago = 'aprobado' WHERE id = ticket_id; ELSE RAISE EXCEPTION 'PIN Incorrecto'; END IF;
-END; $$;
+        let usuarioActual = null;
+        let listaCandidatos = [];
+        let indiceActual = 0;
 
-CREATE OR REPLACE FUNCTION borrar_ticket(ticket_id UUID, pin_seguridad TEXT) RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-  IF pin_seguridad = '43fn2e1_$3' THEN DELETE FROM public.entradas WHERE id = ticket_id; ELSE RAISE EXCEPTION 'PIN Incorrecto'; END IF;
-END; $$;
+        async function ingresarAlModoMatch() {
+            const dniVal = document.getElementById('input-dni').value.trim();
+            if(dniVal.length !== 8) {
+                alert("⚠️ Ingresá un DNI válido de 8 números.");
+                return;
+            }
 
-CREATE OR REPLACE FUNCTION get_contadores(pin_seguridad TEXT) RETURNS JSON LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE total_vendidas INT; total_ingresados INT;
-BEGIN
-  IF pin_seguridad = '7a9t5!2jg_!' THEN
-    SELECT COUNT(*) INTO total_vendidas FROM public.entradas WHERE estado_pago = 'aprobado';
-    SELECT COUNT(*) INTO total_ingresados FROM public.entradas WHERE estado_pago = 'aprobado' AND ingresado = true;
-    RETURN json_build_object('vendidas', total_vendidas, 'ingresados', total_ingresados);
-  ELSE RAISE EXCEPTION 'PIN Incorrecto'; END IF;
-END; $$;
+            const { data, error } = await client.rpc('validar_acceso_match', { identificador: dniVal });
 
-CREATE OR REPLACE FUNCTION public.buscar_ticket_id(ticket_id TEXT, pin_seguridad TEXT) RETURNS SETOF public.entradas LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE texto_limpio TEXT;
-BEGIN
-  IF pin_seguridad = '7a9t5!2jg_!' THEN
-    texto_limpio := TRIM(ticket_id);
-    RETURN QUERY SELECT * FROM public.entradas WHERE id::text ILIKE CONCAT('%', texto_limpio, '%') OR id_venta::text ILIKE CONCAT('%', texto_limpio, '%') OR dni = texto_limpio OR texto_limpio ILIKE CONCAT('%', id::text, '%');
-  ELSE RAISE EXCEPTION 'PIN Incorrecto'; END IF;
-END; $$;
+            if(error || !data || data.length === 0) {
+                alert("🔒 Acceso denegado: O el DNI no existe, o todavía no escaneaste tu QR en la puerta del evento.");
+                return;
+            }
 
-CREATE OR REPLACE FUNCTION public.buscar_ticket_dni(dni_buscado TEXT, pin_seguridad TEXT) RETURNS SETOF public.entradas LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-  IF pin_seguridad = '7a9t5!2jg_!' THEN RETURN QUERY SELECT * FROM public.entradas WHERE TRIM(dni) = TRIM(dni_buscado); ELSE RAISE EXCEPTION 'PIN Incorrecto'; END IF;
-END; $$;
+            usuarioActual = data[0];
+            document.getElementById('pantalla-login').style.display = 'none';
+            document.getElementById('pantalla-match').style.display = 'block';
+            document.getElementById('usuario-logueado').innerText = `Hola, ${usuarioActual.nombre} (@${usuarioActual.instagram || 'Sin IG'})`;
 
-CREATE OR REPLACE FUNCTION public.marcar_ingreso(ticket_id UUID, pin_seguridad TEXT) RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-  IF pin_seguridad = '7a9t5!2jg_!' THEN UPDATE public.entradas SET ingresado = true, fecha_ingreso = NOW() WHERE id = ticket_id; ELSE RAISE EXCEPTION 'PIN Incorrecto'; END IF;
-END; $$;
+            cargarCandidatos();
+        }
 
-CREATE OR REPLACE FUNCTION guardar_nps(ticket_id UUID, puntaje INT) RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN UPDATE public.entradas SET puntuacion = puntaje WHERE id = ticket_id; END; $$;
+        async function cargarCandidatos() {
+            const { data, error } = await client.rpc('obtener_candidatos', { mi_id: usuarioActual.id });
+            
+            if(error) {
+                console.error("Error al buscar candidatos", error);
+                return;
+            }
 
--- 4. FUNCIONES NUEVAS PARA EL MODO MATCH
-CREATE OR REPLACE FUNCTION validar_acceso_match(identificador TEXT) RETURNS SETOF public.entradas LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-  RETURN QUERY SELECT * FROM public.entradas WHERE (id::text = identificador OR dni = identificador) AND estado_pago = 'aprobado' AND ingresado = true;
-END; $$;
+            listaCandidatos = data || [];
+            indiceActual = 0;
+            mostrarCandidatoActual();
+        }
 
-CREATE OR REPLACE FUNCTION obtener_candidatos(mi_id UUID) RETURNS SETOF public.entradas LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-  RETURN QUERY SELECT * FROM public.entradas WHERE ingresado = true AND id != mi_id AND instagram IS NOT NULL AND instagram != '' AND id NOT IN (SELECT para_ticket_id FROM public.likes WHERE de_ticket_id = mi_id);
-END; $$;
+        function mostrarCandidatoActual() {
+            const tarjeta = document.getElementById('tarjeta-candidato');
+            const botones = document.getElementById('botones-accion');
 
-CREATE OR REPLACE FUNCTION dar_like(mi_id UUID, objetivo_id UUID) RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE es_match BOOLEAN := FALSE;
-BEGIN
-  INSERT INTO public.likes (de_ticket_id, para_ticket_id) VALUES (mi_id, objetivo_id) ON CONFLICT (de_ticket_id, para_ticket_id) DO NOTHING;
-  IF EXISTS (SELECT 1 FROM public.likes WHERE de_ticket_id = objetivo_id AND para_ticket_id = mi_id) THEN es_match := TRUE; END IF;
-  RETURN es_match;
-END; $$;
+            if(indiceActual >= listaCandidatos.length) {
+                tarjeta.innerHTML = "<h3>¡No hay más perfiles por ahora! 🎉</h3><p style='color:#666; font-size:13px;'>Volvé a revisar más tarde cuando llegue más gente.</p>";
+                botones.style.display = 'none';
+                return;
+            }
 
--- 5. PERMISOS
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated;
-NOTIFY pgrst, 'reload schema';
+            const candidato = listaCandidatos[indiceActual];
+            botones.style.display = 'flex';
+            tarjeta.innerHTML = `
+                <span style="background:#333; padding:4px 12px; border-radius:20px; font-size:11px; margin-bottom:10px; color:#aaa;">${candidato.tipo_entrada}</span>
+                <h2>${candidato.nombre} ${candidato.apellido}</h2>
+                <p style="color: var(--rosa); font-weight:bold; font-size:16px;">@${candidato.instagram.replace('@','')}</p>
+            `;
+        }
+
+        function siguienteCandidato() {
+            indiceActual++;
+            mostrarCandidatoActual();
+        }
+
+        async function darLike() {
+            const candidato = listaCandidatos[indiceActual];
+            
+            const { data: esMatch, error } = await client.rpc('dar_like', { 
+                mi_id: usuarioActual.id, 
+                objetivo_id: candidato.id 
+            });
+
+            if(!error && esMatch) {
+                const igLimpio = candidato.instagram.replace('@','').trim();
+                document.getElementById('link-instagram').href = `https://instagram.com/${igLimpio}`;
+                document.getElementById('modal-match').style.display = 'flex';
+            }
+
+            siguienteCandidato();
+        }
+
+        function cerrarModalMatch() {
+            document.getElementById('modal-match').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
