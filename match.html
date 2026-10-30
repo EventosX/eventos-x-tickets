@@ -33,7 +33,6 @@
 </head>
 <body>
 
-    <!-- Pantalla 1: Login por DNI (Solo se ve si no entra por el link del mail) -->
     <div class="container active" id="pantalla-login">
         <h1>MATCH <span>X</span></h1>
         <p style="color: #888; font-size: 14px; margin-bottom: 20px; line-height:1.5;">Si ya estás adentro de la fiesta, ingresá tu DNI para desbloquear la experiencia.</p>
@@ -41,25 +40,20 @@
         <button class="btn" id="btn-login-manual" onclick="loginManual()">Ingresar</button>
     </div>
 
-    <!-- Pantalla 2: Onboarding (Preferencias) -->
     <div class="container" id="pantalla-onboarding">
         <h1>MATCH <span>X</span></h1>
         <p style="color: #ccc; font-size: 14px; margin-bottom: 25px;">Completá tu perfil para ver quién más está buscando conocer gente hoy.</p>
-        
         <input type="text" id="input-ig" placeholder="Tu @instagram" oninput="this.value = this.value.replace(/[^a-zA-Z0-9._]/g, '');" required>
-        
         <select id="select-interes" required>
             <option value="" disabled selected>¿A quién querés conocer?</option>
             <option value="Mujeres">Mujeres</option>
             <option value="Hombres">Hombres</option>
             <option value="Ambos">Ambos</option>
         </select>
-
         <button class="btn" onclick="activarPerfil()">Activar Perfil y Entrar</button>
         <button class="btn btn-outline" onclick="rechazarMatch()">No busco nada, gracias</button>
     </div>
 
-    <!-- Pantalla 3: El Tinder -->
     <div class="container" id="pantalla-match">
         <h1>MATCH <span>X</span></h1>
         <p style="color: #888; font-size: 12px; margin-bottom: 20px;" id="usuario-logueado"></p>
@@ -69,12 +63,11 @@
         </div>
 
         <div class="acciones" id="botones-accion" style="display: none;">
-            <button class="btn-accion btn-pasar" onclick="siguienteCandidato()">❌</button>
-            <button class="btn-accion btn-like" onclick="darLike()">❤️</button>
+            <button class="btn-accion btn-pasar" onclick="registrarAccion('pass')">❌</button>
+            <button class="btn-accion btn-like" onclick="registrarAccion('like')">❤️</button>
         </div>
     </div>
 
-    <!-- Popup Match -->
     <div id="modal-match">
         <h2>🔥 ¡HAY MATCH! 🔥</h2>
         <p style="color: #ccc; font-size: 16px; margin-bottom: 5px;">A esta persona también le gustaste.</p>
@@ -93,7 +86,6 @@
         let listaCandidatos = [];
         let indiceActual = 0;
 
-        // Auto-login al abrir desde el mail
         window.onload = async () => {
             const urlParams = new URLSearchParams(window.location.search);
             const ticketId = urlParams.get('id');
@@ -122,7 +114,6 @@
 
             usuarioActual = data[0];
             
-            // Si ya activó el match antes, salta directo al juego
             if (usuarioActual.busca_match && usuarioActual.instagram) {
                 iniciarTinder();
             } else {
@@ -134,15 +125,9 @@
         async function activarPerfil() {
             const ig = document.getElementById('input-ig').value.trim();
             const interes = document.getElementById('select-interes').value;
-            
             if(!ig || !interes) { alert("Completa los dos campos para avanzar."); return; }
 
-            const { error } = await client.rpc('activar_perfil_match', { 
-                p_ticket_id: usuarioActual.id, 
-                p_instagram: ig, 
-                p_interes: interes 
-            });
-
+            const { error } = await client.rpc('activar_perfil_match', { p_ticket_id: usuarioActual.id, p_instagram: ig, p_interes: interes });
             if(!error) {
                 usuarioActual.instagram = ig;
                 usuarioActual.busca_match = true;
@@ -190,17 +175,22 @@
             `;
         }
 
-        function siguienteCandidato() { indiceActual++; mostrarCandidatoActual(); }
-
-        async function darLike() {
+        // Nueva función unificada que envía Like o Pass a la base
+        async function registrarAccion(tipo_accion) {
             const candidato = listaCandidatos[indiceActual];
-            const { data: esMatch, error } = await client.rpc('dar_like', { mi_id: usuarioActual.id, objetivo_id: candidato.id });
+            const { data: esMatch, error } = await client.rpc('registrar_interaccion', { 
+                mi_id: usuarioActual.id, 
+                objetivo_id: candidato.id,
+                tipo_accion: tipo_accion
+            });
 
-            if(!error && esMatch) {
+            if(!error && esMatch && tipo_accion === 'like') {
                 document.getElementById('link-instagram').href = `https://instagram.com/${candidato.instagram.replace('@','')}`;
                 document.getElementById('modal-match').style.display = 'flex';
             }
-            siguienteCandidato();
+            
+            indiceActual++;
+            mostrarCandidatoActual();
         }
 
         function cerrarModalMatch() { document.getElementById('modal-match').style.display = 'none'; }
