@@ -1,0 +1,108 @@
+-- 1. TABLA ENTRADAS (Agregamos la columna instagram si no existe)
+CREATE TABLE IF NOT EXISTS public.entradas (
+    id UUID PRIMARY KEY,
+    nombre TEXT NOT NULL,
+    apellido TEXT NOT NULL,
+    dni TEXT NOT NULL CONSTRAINT dni_unico_v2 UNIQUE,
+    email TEXT NOT NULL,
+    tipo_entrada TEXT NOT NULL,
+    ingresado BOOLEAN DEFAULT false,
+    id_venta UUID,
+    estado_pago TEXT DEFAULT 'pendiente',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    fecha_ingreso TIMESTAMPTZ,
+    puntuacion INT,
+    instagram TEXT
+);
+
+ALTER TABLE public.entradas ADD COLUMN IF NOT EXISTS instagram TEXT;
+
+ALTER TABLE public.entradas ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir insertar entradas publicamente" ON public.entradas;
+CREATE POLICY "Permitir insertar entradas publicamente" ON public.entradas FOR INSERT TO anon, authenticated WITH CHECK (true);
+GRANT INSERT, SELECT, UPDATE ON TABLE public.entradas TO anon, authenticated;
+
+-- 2. TABLA LIKES (Nueva para el Modo Match)
+CREATE TABLE IF NOT EXISTS public.likes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    de_ticket_id UUID REFERENCES public.entradas(id) ON DELETE CASCADE,
+    para_ticket_id UUID REFERENCES public.entradas(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unico_like UNIQUE (de_ticket_id, para_ticket_id)
+);
+
+ALTER TABLE public.likes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir gestion publica de likes" ON public.likes;
+CREATE POLICY "Permitir gestion publica de likes" ON public.likes FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE public.likes TO anon, authenticated;
+
+-- 3. FUNCIONES DEL SISTEMA BASE (Ventas, Admin y Escáner)
+CREATE OR REPLACE FUNCTION get_pendientes(pin_seguridad TEXT) RETURNS SETOF public.entradas LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF pin_seguridad = '43fn2e1_$3' THEN RETURN QUERY SELECT * FROM public.entradas WHERE estado_pago = 'pendiente' ORDER BY created_at DESC; ELSE RAISE EXCEPTION 'PIN Incorrecto'; END IF;
+END; $$;
+
+CREATE OR REPLACE FUNCTION aprobar_ticket(ticket_id UUID, pin_seguridad TEXT) RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF pin_seguridad = '43fn2e1_$3' THEN UPDATE public.entradas SET estado_pago = 'aprobado' WHERE id = ticket_id; ELSE RAISE EXCEPTION 'PIN Incorrecto'; END IF;
+END; $$;
+
+CREATE OR REPLACE FUNCTION borrar_ticket(ticket_id UUID, pin_seguridad TEXT) RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF pin_seguridad = '43fn2e1_$3' THEN DELETE FROM public.entradas WHERE id = ticket_id; ELSE RAISE EXCEPTION 'PIN Incorrecto'; END IF;
+END; $$;
+
+CREATE OR REPLACE FUNCTION get_contadores(pin_seguridad TEXT) RETURNS JSON LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE total_vendidas INT; total_ingresados INT;
+BEGIN
+  IF pin_seguridad = '7a9t5!2jg_!' THEN
+    SELECT COUNT(*) INTO total_vendidas FROM public.entradas WHERE estado_pago = 'aprobado';
+    SELECT COUNT(*) INTO total_ingresados FROM public.entradas WHERE estado_pago = 'aprobado' AND ingresado = true;
+    RETURN json_build_object('vendidas', total_vendidas, 'ingresados', total_ingresados);
+  ELSE RAISE EXCEPTION 'PIN Incorrecto'; END IF;
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.buscar_ticket_id(ticket_id TEXT, pin_seguridad TEXT) RETURNS SETOF public.entradas LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE texto_limpio TEXT;
+BEGIN
+  IF pin_seguridad = '7a9t5!2jg_!' THEN
+    texto_limpio := TRIM(ticket_id);
+    RETURN QUERY SELECT * FROM public.entradas WHERE id::text ILIKE CONCAT('%', texto_limpio, '%') OR id_venta::text ILIKE CONCAT('%', texto_limpio, '%') OR dni = texto_limpio OR texto_limpio ILIKE CONCAT('%', id::text, '%');
+  ELSE RAISE EXCEPTION 'PIN Incorrecto'; END IF;
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.buscar_ticket_dni(dni_buscado TEXT, pin_seguridad TEXT) RETURNS SETOF public.entradas LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF pin_seguridad = '7a9t5!2jg_!' THEN RETURN QUERY SELECT * FROM public.entradas WHERE TRIM(dni) = TRIM(dni_buscado); ELSE RAISE EXCEPTION 'PIN Incorrecto'; END IF;
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.marcar_ingreso(ticket_id UUID, pin_seguridad TEXT) RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF pin_seguridad = '7a9t5!2jg_!' THEN UPDATE public.entradas SET ingresado = true, fecha_ingreso = NOW() WHERE id = ticket_id; ELSE RAISE EXCEPTION 'PIN Incorrecto'; END IF;
+END; $$;
+
+CREATE OR REPLACE FUNCTION guardar_nps(ticket_id UUID, puntaje INT) RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN UPDATE public.entradas SET puntuacion = puntaje WHERE id = ticket_id; END; $$;
+
+-- 4. FUNCIONES NUEVAS PARA EL MODO MATCH
+CREATE OR REPLACE FUNCTION validar_acceso_match(identificador TEXT) RETURNS SETOF public.entradas LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  RETURN QUERY SELECT * FROM public.entradas WHERE (id::text = identificador OR dni = identificador) AND estado_pago = 'aprobado' AND ingresado = true;
+END; $$;
+
+CREATE OR REPLACE FUNCTION obtener_candidatos(mi_id UUID) RETURNS SETOF public.entradas LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  RETURN QUERY SELECT * FROM public.entradas WHERE ingresado = true AND id != mi_id AND instagram IS NOT NULL AND instagram != '' AND id NOT IN (SELECT para_ticket_id FROM public.likes WHERE de_ticket_id = mi_id);
+END; $$;
+
+CREATE OR REPLACE FUNCTION dar_like(mi_id UUID, objetivo_id UUID) RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE es_match BOOLEAN := FALSE;
+BEGIN
+  INSERT INTO public.likes (de_ticket_id, para_ticket_id) VALUES (mi_id, objetivo_id) ON CONFLICT (de_ticket_id, para_ticket_id) DO NOTHING;
+  IF EXISTS (SELECT 1 FROM public.likes WHERE de_ticket_id = objetivo_id AND para_ticket_id = mi_id) THEN es_match := TRUE; END IF;
+  RETURN es_match;
+END; $$;
+
+-- 5. PERMISOS
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated;
+NOTIFY pgrst, 'reload schema';
