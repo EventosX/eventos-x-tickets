@@ -118,7 +118,12 @@
                 <span>🆔</span>
                 <input type="tel" id="input-dni" placeholder="Tu DNI (8 números)" maxlength="8" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
             </div>
+            <div class="input-box">
+                <span>✉️</span>
+                <input type="email" id="input-email" placeholder="El mail con el que sacaste la entrada" autocomplete="email">
+            </div>
             <button class="btn-principal" id="btn-login-manual" onclick="loginManual()">Entrar a la Pista</button>
+            <p class="subtitulo" style="margin:20px 0 0; font-size:13px;">Tip: abrí el link del mail que te llegó al entrar y no tenés que escribir nada.</p>
         </div>
     </div>
 
@@ -230,27 +235,38 @@
             document.getElementById(id).classList.add('active');
         }
 
+        // Evita que un texto "malicioso" ejecute código en la página
+        const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const limpiarIG = (ig) => String(ig || '').replace('@', '').trim().toLowerCase();
+
         window.onload = async () => {
-            const ticketId = new URLSearchParams(window.location.search).get('id');
-            if (ticketId) await validarUsuario(ticketId);
+            // Prioridad: link del mail (?id=...) y si no, la sesión guardada en este celular
+            const ticketId = new URLSearchParams(window.location.search).get('id') || localStorage.getItem('match_x_id');
+            if (ticketId) await validarUsuario(ticketId, null, true);
         };
 
         async function loginManual() {
             const dniVal = document.getElementById('input-dni').value.trim();
-            if(dniVal.length !== 8) return alert("Ingresá un DNI de 8 números.");
+            const emailVal = document.getElementById('input-email').value.trim();
+            if (dniVal.length !== 8) return alert("Ingresá un DNI de 8 números.");
+            if (!emailVal.includes('@')) return alert("Ingresá el mail con el que sacaste la entrada.");
             document.getElementById('btn-login-manual').innerText = "Verificando...";
-            await validarUsuario(dniVal);
+            await validarUsuario(dniVal, emailVal, false);
         }
 
-        async function validarUsuario(identificador) {
+        async function validarUsuario(identificador, email, silencioso) {
             hapticTap();
-            const { data, error } = await client.rpc('validar_acceso_match', { identificador: identificador });
+            const { data, error } = await client.rpc('validar_acceso_match', { identificador: identificador, p_email: email });
             if (error || !data || data.length === 0) {
-                alert("🔒 Tenés que escanear tu QR en la puerta de la fiesta primero.");
+                localStorage.removeItem('match_x_id');
+                if (!silencioso || new URLSearchParams(window.location.search).get('id')) {
+                    alert("🔒 No encontramos tu acceso. Revisá DNI y mail, o escaneá tu QR en la puerta primero.");
+                }
                 document.getElementById('btn-login-manual').innerText = "Entrar a la Pista";
                 return;
             }
             usuarioActual = data[0];
+            localStorage.setItem('match_x_id', usuarioActual.id);
             if (usuarioActual.busca_match && usuarioActual.instagram) iniciarTinder();
             else irAPantalla('pantalla-onboarding');
         }
@@ -272,7 +288,7 @@
                 usuarioActual.busca_match = true;
                 iniciarTinder();
             } else { 
-                alert("Error de conexión al subir el perfil.");
+                alert(error.message.includes('Instagram') ? "Ese usuario de Instagram no es válido." : "Error de conexión al subir el perfil.");
                 document.getElementById('btn-activar').innerText = "Activar Radar";
             }
         }
@@ -294,12 +310,12 @@
 
         /* MAGIA: CARGADOR DE IMÁGENES ANTI-BLOQUEO */
         function cargarImagenSegura(imgElement, username, nombre) {
-            const igClean = username.replace('@', '').trim();
+            const igClean = encodeURIComponent(limpiarIG(username));
             
             // Si Meta bloquea la foto, saltamos instantáneamente al Avatar Premium.
             imgElement.onerror = function() {
                 this.onerror = null; // Evita bucle
-                this.src = `https://api.dicebear.com/7.x/initials/svg?seed=${nombre}&backgroundColor=111111&textColor=ec4899&fontSize=40&fontWeight=bold`;
+                this.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(nombre || igClean)}&backgroundColor=111111&textColor=ec4899&fontSize=40&fontWeight=bold`;
             };
             
             // Le forzamos el fallback=false a la API. Así nos aseguramos de que si falla, salte al onerror.
@@ -334,16 +350,16 @@
 
             const c1 = listaCandidatos[indiceActual];
             cargarImagenSegura(document.getElementById('foto-1'), c1.instagram, c1.nombre);
-            document.getElementById('nombre-1').innerHTML = `@${c1.instagram.replace('@','').toLowerCase()}`;
-            
-            const isOnline1 = Math.random() > 0.3; 
-            document.getElementById('status-dot-1').className = isOnline1 ? 'dot-online' : 'dot-offline';
-            document.getElementById('status-txt-1').innerText = isOnline1 ? 'Online' : 'Desconectado/a';
+            document.getElementById('nombre-1').textContent = `@${limpiarIG(c1.instagram)}`;
+            // Todos los perfiles que aparecen ya entraron a la fiesta (no hay estado "online" inventado)
+            document.getElementById('status-dot-1').className = 'dot-online';
+            document.getElementById('status-txt-1').textContent = c1.me_dio_super ? '⭐ Te dio SÚPER BARRO' : 'En la fiesta';
 
             if (indiceActual + 1 < listaCandidatos.length) {
                 const c2 = listaCandidatos[indiceActual + 1];
                 cargarImagenSegura(document.getElementById('foto-2'), c2.instagram, c2.nombre);
-                document.getElementById('nombre-2').innerHTML = `@${c2.instagram.replace('@','').toLowerCase()}`;
+                document.getElementById('nombre-2').textContent = `@${limpiarIG(c2.instagram)}`;
+                document.getElementById('status-txt-2').textContent = c2.me_dio_super ? '⭐ Te dio SÚPER BARRO' : 'En la fiesta';
                 t2.style.opacity = 1;
                 t2.style.transform = 'scale(0.95) translateY(15px)';
             } else {
@@ -496,8 +512,8 @@
 
         function dispararPantallaMatch(candidato) {
             hapticMatch();
-            document.getElementById('txt-match-nombre').innerText = `La onda es mutua con @${candidato.instagram.replace('@','').toLowerCase()}`;
-            document.getElementById('link-instagram-popup').href = `https://instagram.com/${candidato.instagram.replace('@','')}`;
+            document.getElementById('txt-match-nombre').innerText = `La onda es mutua con @${limpiarIG(candidato.instagram)}`;
+            document.getElementById('link-instagram-popup').href = `https://instagram.com/${encodeURIComponent(limpiarIG(candidato.instagram))}`;
             document.getElementById('modal-match-mutuo').style.display = 'flex';
             crearConfeti();
         }
@@ -510,15 +526,11 @@
             const lista = document.getElementById('lista-matches');
             lista.innerHTML = "<p style='text-align: center; color: #888; margin-top:50px;'>Cargando chats...</p>";
 
-            const { data: interaccionesDadas } = await client.from('likes').select('para_ticket_id, accion').eq('de_ticket_id', usuarioActual.id).in('accion', ['like', 'superlike']);
-            const { data: interaccionesRecibidas } = await client.from('likes').select('de_ticket_id, accion').eq('para_ticket_id', usuarioActual.id).in('accion', ['like', 'superlike']);
+            const { data: matches, error } = await client.rpc('obtener_mis_matches', { mi_id: usuarioActual.id });
 
-            if (!interaccionesDadas || !interaccionesRecibidas) { lista.innerHTML = "<p style='text-align: center; color:#888;'>Sin matches.</p>"; return; }
+            if (error) { lista.innerHTML = "<p style='text-align: center; color:#888;'>Error de conexión. Probá de nuevo.</p>"; return; }
 
-            const idsDados = interaccionesDadas.map(l => l.para_ticket_id);
-            const mutuos = interaccionesRecibidas.filter(l => idsDados.includes(l.de_ticket_id));
-
-            if (mutuos.length === 0) {
+            if (!matches || matches.length === 0) {
                 lista.innerHTML = `
                     <div style="text-align:center; margin-top:50px;">
                         <div class="radar" style="margin: 0 auto; background:#333; margin-bottom:20px;"></div>
@@ -529,33 +541,21 @@
                 return;
             }
 
-            const idsMutuos = mutuos.map(l => l.de_ticket_id);
-            const { data: matches } = await client.from('entradas').select('id, nombre, instagram').in('id', idsMutuos);
-            
-            lista.innerHTML = "";
-            matches.forEach(m => {
-                const interaccionRecibida = mutuos.find(l => l.de_ticket_id === m.id);
-                const interaccionDada = interaccionesDadas.find(l => l.para_ticket_id === m.id);
-                const esSuperMatch = (interaccionRecibida && interaccionRecibida.accion === 'superlike') || (interaccionDada && interaccionDada.accion === 'superlike');
-                
-                const claseItem = esSuperMatch ? 'match-item super-match' : 'match-item';
-
-                // Generamos la img con la misma lógica segura
-                const igLimpio = m.instagram.replace('@', '').trim();
-                const fotoUrl = `https://unavatar.io/instagram/${igLimpio}?fallback=false`;
-                const avatarPremium = `https://api.dicebear.com/7.x/initials/svg?seed=${m.nombre}&backgroundColor=111111&textColor=ec4899`;
-
-                lista.innerHTML += `
-                    <div class="${claseItem}">
-                        <img src="${fotoUrl}" onerror="this.onerror=null; this.src='${avatarPremium}';" class="match-avatar" alt="${m.nombre}">
+            lista.innerHTML = matches.map(m => {
+                const ig = limpiarIG(m.instagram);
+                const igUrl = encodeURIComponent(ig);
+                const fotoUrl = `https://unavatar.io/instagram/${igUrl}?fallback=false`;
+                const avatarPremium = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(m.nombre || ig)}&backgroundColor=111111&textColor=ec4899`;
+                return `
+                    <div class="${m.es_super ? 'match-item super-match' : 'match-item'}">
+                        <img src="${fotoUrl}" data-fallback="${avatarPremium}" onerror="this.onerror=null; this.src=this.dataset.fallback;" class="match-avatar" alt="${esc(m.nombre)}">
                         <div class="match-info">
-                            <h3 style="${esSuperMatch ? 'color: var(--tinder-oro);' : ''}">@${m.instagram.replace('@','').toLowerCase()} ${esSuperMatch ? '⭐' : ''}</h3>
-                            <p style="${esSuperMatch ? 'color: #888;' : ''}">${m.nombre}</p>
+                            <h3 style="${m.es_super ? 'color: var(--tinder-oro);' : ''}">@${esc(ig)} ${m.es_super ? '⭐' : ''}</h3>
+                            <p>${esc(m.nombre)}</p>
                         </div>
-                        <a href="https://instagram.com/${m.instagram.replace('@','')}" target="_blank" class="btn-ig-chico">💬</a>
-                    </div>
-                `;
-            });
+                        <a href="https://instagram.com/${igUrl}" target="_blank" rel="noopener" class="btn-ig-chico">💬</a>
+                    </div>`;
+            }).join('');
         }
     </script>
 </body>
