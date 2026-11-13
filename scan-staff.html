@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Eventos X - Scan Staff</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
         :root { --azul: #3b82f6; --rojo: #ef4444; --verde: #10b981; --fondo: #0a0a0a; --caja: #161616; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--fondo); color: white; margin: 0; text-align: center; overflow-x: hidden; }
@@ -75,29 +74,33 @@
         const supabaseUrl = 'https://vogizootbnhvbeugroyr.supabase.co';
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvZ2l6b290Ym5odmJldWdyb3lyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MzY3MTAsImV4cCI6MjA5MDIxMjcxMH0.7dNueBWtcx0nUHjligZl4hS72qqlswuYw0WYR0QeVhI';
         const client = window.supabase.createClient(supabaseUrl, supabaseKey);
-        
-        // INICIALIZAMOS EMAILJS
-        emailjs.init("fTAOcJXUAi8-UKPu2"); 
+
+        // El PIN queda guardado en el celular del guardia para no tipearlo toda la noche
+        const getPin = () => localStorage.getItem('pin_staff_x');
 
         let escaneando = true;
+        let ultimoCodigo = '';
+        let ultimoCodigoHora = 0;
 
         window.onload = async () => {
-            const pinGuardado = localStorage.getItem('pin_staff_x');
-            if(pinGuardado) {
-                const { error } = await client.rpc('get_contadores', { pin_seguridad: pinGuardado });
-                if(!error) iniciarScanner();
+            if (getPin()) {
+                const { error } = await client.rpc('get_contadores', { pin_seguridad: getPin() });
+                if (!error) iniciarScanner();
                 else localStorage.removeItem('pin_staff_x');
             }
-        }
+            document.getElementById('pinInput').addEventListener('keydown', e => { if (e.key === 'Enter') checkPin(); });
+            document.getElementById('dni-manual').addEventListener('keydown', e => { if (e.key === 'Enter') buscarPorDNI(); });
+            document.getElementById('dni-manual').addEventListener('input', e => { e.target.value = e.target.value.replace(/[^0-9]/g, ''); });
+        };
 
         async function checkPin() {
             const inputVal = document.getElementById('pinInput').value.trim();
             const btn = document.getElementById('btn-login');
-            if(!inputVal) return;
+            if (!inputVal) return;
             btn.innerText = "Verificando..."; btn.disabled = true;
-            
+
             const { error } = await client.rpc('get_contadores', { pin_seguridad: inputVal });
-            if(error) {
+            if (error) {
                 alert("❌ PIN INCORRECTO. Acceso denegado.");
                 document.getElementById('pinInput').value = ""; btn.innerText = "Entrar al Escáner"; btn.disabled = false;
             } else {
@@ -109,80 +112,93 @@
         function iniciarScanner() {
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('main-interface').style.display = 'block';
-            actualizarContador(); startScanner();
+            actualizarContador();
+            setInterval(actualizarContador, 20000); // suma también lo que escanean otros guardias
+            startScanner();
         }
 
         function cerrarSesion() { localStorage.removeItem('pin_staff_x'); location.reload(); }
 
         async function actualizarContador() {
-            try {
-                const { data } = await client.rpc('get_contadores', { pin_seguridad: localStorage.getItem('pin_staff_x') });
-                document.getElementById('txt-contador').innerText = `${data.ingresados || 0} / ${data.vendidas || 0}`;
-            } catch (e) {}
+            const { data, error } = await client.rpc('get_contadores', { pin_seguridad: getPin() });
+            if (!error && data) document.getElementById('txt-contador').innerText = `${data.ingresados || 0} / ${data.vendidas || 0}`;
         }
 
         async function onScanSuccess(decodedText) {
             if (!escaneando) return;
-            prepararValidacion();
-            try {
-                const { data, error } = await client.rpc('buscar_ticket_id', { ticket_id: decodedText, pin_seguridad: localStorage.getItem('pin_staff_x') });
-                procesarResultado(data && data.length > 0 ? data[0] : null, error);
-            } catch (e) { procesarResultado(null, true); }
+            // Ignora el mismo QR leído dos veces seguidas en 5 segundos
+            if (decodedText === ultimoCodigo && Date.now() - ultimoCodigoHora < 5000) return;
+            ultimoCodigo = decodedText; ultimoCodigoHora = Date.now();
+            await validar(decodedText);
         }
 
         async function buscarPorDNI() {
             if (!escaneando) return;
-            const dniIngresado = document.getElementById('dni-manual').value;
+            const dniIngresado = document.getElementById('dni-manual').value.trim();
             if (dniIngresado.length !== 8) { alert("⚠️ DNI inválido."); return; }
-            prepararValidacion();
-            try {
-                const { data, error } = await client.rpc('buscar_ticket_dni', { dni_buscado: dniIngresado, pin_seguridad: localStorage.getItem('pin_staff_x') });
-                procesarResultado(data && data.length > 0 ? data[0] : null, error);
-                document.getElementById('dni-manual').value = ""; 
-            } catch (e) { alert("⚠️ Error de red"); escaneando = true; }
+            document.getElementById('dni-manual').value = "";
+            await validar(dniIngresado);
         }
 
-        async function procesarResultado(entrada, error) {
-            if (error || !entrada) {
-                mostrarPopup("TICKET INVÁLIDO", "No se encuentra en la base.", "❌", "#450a0a", "flash-err", "", "");
-            } else if (entrada.estado_pago !== 'aprobado') {
-                mostrarPopup("PAGO PENDIENTE", "Esta entrada no está pagada", "❌", "#450a0a", "flash-err", `Asistente: ${entrada.nombre} ${entrada.apellido}`, entrada.tipo_entrada);
-            } else if (entrada.ingresado) {
-                mostrarPopup("¡YA INGRESÓ!", "Este ticket ya fue utilizado", "⚠️", "#451a03", "flash-err", `Asistente: ${entrada.nombre} ${entrada.apellido}`, entrada.tipo_entrada);
-            } else {
-                // 1. Marca el ingreso en Supabase (habilita al usuario para el Match)
-                await client.rpc('marcar_ingreso', { ticket_id: entrada.id, pin_seguridad: localStorage.getItem('pin_staff_x') });
-                
-                // 2. Muestra la pantalla verde de Acceso Autorizado al guardia
-                mostrarPopup("ACCESO AUTORIZADO", `${entrada.nombre} ${entrada.apellido}`, "✅", "#022c22", "flash-ok", `DNI: ${entrada.dni}`, entrada.tipo_entrada);
-                actualizarContador(); 
-                
-                // 3. DISPARA EL MAIL AL INSTANTE USANDO EL TEMPLATE CORRECTO
-                emailjs.send("service_6r4tg5n", "template_5xk3zup", {
-                    nombre_cliente: entrada.nombre,
-                    email_cliente: entrada.email,
-                    link_match: `https://eventos-x.github.io/eventos-x-tickets/match.html?id=${entrada.id}`
-                }).then(
-                    function(response) { console.log("Mail enviado al instante a: " + entrada.email); },
-                    function(error) { console.error("Error al enviar el mail: ", error); }
-                );
+        // Valida y marca el ingreso en UN solo paso en la base:
+        // si dos guardias escanean el mismo QR al mismo tiempo, solo uno da "Acceso autorizado".
+        async function validar(codigo) {
+            prepararValidacion();
+            try {
+                const { data, error } = await client.rpc('registrar_ingreso', { p_codigo: codigo, pin_seguridad: getPin() });
+                if (error) throw error;
+                procesarResultado(data && data[0]);
+            } catch (e) {
+                mostrarPopup("SIN CONEXIÓN", "No se pudo validar. Probá de nuevo.", "📶", "#1f2937", "flash-err", "", "");
             }
         }
 
+        function procesarResultado(r) {
+            const asistente = r && r.nombre ? `${r.nombre} ${r.apellido}` : '';
+            if (!r || r.resultado === 'no_existe') {
+                mostrarPopup("TICKET INVÁLIDO", "No se encuentra en la base.", "❌", "#450a0a", "flash-err", "", "");
+            } else if (r.resultado === 'pendiente') {
+                mostrarPopup("PAGO PENDIENTE", "Esta entrada no está pagada", "❌", "#450a0a", "flash-err", `Asistente: ${asistente}`, r.tipo_entrada);
+            } else if (r.resultado === 'ya_ingreso') {
+                const hora = r.fecha_ingreso ? new Date(r.fecha_ingreso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '';
+                mostrarPopup("¡YA INGRESÓ!", `Este ticket ya fue usado${hora ? ' a las ' + hora + ' hs' : ''}`, "⚠️", "#451a03", "flash-err", `Asistente: ${asistente} · DNI ${r.dni}`, r.tipo_entrada);
+            } else {
+                // La base ya marcó el ingreso y puso en cola el mail con el link al Match
+                mostrarPopup("ACCESO AUTORIZADO", asistente, "✅", "#022c22", "flash-ok", `DNI: ${r.dni}`, r.tipo_entrada);
+                actualizarContador();
+            }
+        }
+
+        function vibrar(ok) { if (navigator.vibrate) navigator.vibrate(ok ? 120 : [200, 100, 200]); }
+
         function prepararValidacion() { escaneando = false; document.getElementById('reader').style.opacity = '0.3'; }
+
         function mostrarPopup(tit, info, ico, bg, flash, dni, tipo) {
+            vibrar(flash === 'flash-ok');
             document.body.classList.add(flash);
             const res = document.getElementById('resultado');
             res.style.display = 'flex'; res.style.background = bg;
-            document.getElementById('res-icono').innerText = ico; document.getElementById('res-titulo').innerText = tit;
-            document.getElementById('res-info').innerText = info; document.getElementById('res-dni').innerText = dni;
+            document.getElementById('res-icono').innerText = ico;
+            document.getElementById('res-titulo').innerText = tit;
+            document.getElementById('res-info').innerText = info;
+            document.getElementById('res-dni').innerText = dni;
             const et = document.getElementById('res-tipo-entrada');
-            if(tipo) { et.style.display = 'inline-block'; et.innerText = tipo; et.style.background = tipo.includes('VIP') ? '#eab308' : '#fff'; et.style.color = '#000'; } 
+            if (tipo) { et.style.display = 'inline-block'; et.innerText = tipo; et.style.background = tipo.includes('VIP') ? '#eab308' : '#fff'; et.style.color = '#000'; }
             else { et.style.display = 'none'; }
             setTimeout(() => document.body.classList.remove(flash), 500);
         }
-        function cerrarResultado() { document.getElementById('resultado').style.display = 'none'; document.getElementById('reader').style.opacity = '1'; setTimeout(() => { escaneando = true; }, 1000); }
-        function startScanner() { const html5QrCode = new Html5Qrcode("reader"); html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess).catch(err => { document.getElementById('reader').innerHTML = "<p style='padding:20px; color:#888;'>Cámara no disponible. Usá el buscador manual.</p>"; }); }
+
+        function cerrarResultado() {
+            document.getElementById('resultado').style.display = 'none';
+            document.getElementById('reader').style.opacity = '1';
+            setTimeout(() => { escaneando = true; }, 800);
+        }
+
+        function startScanner() {
+            const html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess)
+                .catch(() => { document.getElementById('reader').innerHTML = "<p style='padding:20px; color:#888;'>Cámara no disponible. Usá el buscador manual.</p>"; });
+        }
     </script>
 </body>
 </html>
