@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Eventos X - Accesos Oficiales</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <style>
         :root { --azul: #3b82f6; --fondo: #0a0a0a; --caja: #111; --texto: #fff; --borde: #222; --verde: #10b981; --rojo: #ef4444; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--fondo); color: var(--texto); margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; box-sizing: border-box; }
@@ -181,7 +180,6 @@
         const supabaseUrl = 'https://vogizootbnhvbeugroyr.supabase.co';
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvZ2l6b290Ym5odmJldWdyb3lyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MzY3MTAsImV4cCI6MjA5MDIxMjcxMH0.7dNueBWtcx0nUHjligZl4hS72qqlswuYw0WYR0QeVhI';
         const client = window.supabase.createClient(supabaseUrl, supabaseKey);
-        emailjs.init("fTAOcJXUAi8-UKPu2"); 
 
         let idVentaActual = "";
         
@@ -253,15 +251,13 @@
                 idVentaActual = crypto.randomUUID();
                 const datos = {
                     id: idVentaActual,
-                    nombre: document.getElementById('nombre').value,
-                    apellido: document.getElementById('apellido').value,
-                    dni: document.getElementById('dni').value,
-                    email: document.getElementById('email').value,
+                    nombre: document.getElementById('nombre').value.trim(),
+                    apellido: document.getElementById('apellido').value.trim(),
+                    dni: document.getElementById('dni').value.trim(),
+                    email: document.getElementById('email').value.trim().toLowerCase(),
                     tipo_entrada: document.getElementById('tipo_entrada').value,
-                    ingresado: false,
-                    id_venta: idVentaActual,
-                    estado_pago: 'pendiente'
                 };
+                // El estado (pendiente), el ingreso y la fecha los fija la base de datos, no el navegador.
 
                 const { error } = await client.from('entradas').insert([datos]);
                 
@@ -269,7 +265,10 @@
                     if (error.message.includes('AFORO_AGOTADO')) {
                         throw new Error("❌ ¡SOLD OUT! Se acaban de agotar las últimas disponibilidades.");
                     }
-                    if (error.message.includes('dni_unico')) {
+                    if (error.message.includes('DATOS_INVALIDOS')) {
+                        throw new Error("Revisá tus datos: nombre, apellido, DNI de 8 números y un correo válido.");
+                    }
+                    if (error.message.includes('dni_unico') || error.code === '23505') {
                         throw new Error("Este DNI ya tiene un acceso registrado. Por seguridad, solo se permite un acceso por persona.");
                     }
                     throw error;
