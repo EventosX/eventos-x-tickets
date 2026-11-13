@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Eventos X - Panel Admin</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <style>
         :root { --azul: #3b82f6; --fondo: #0a0a0a; --caja: #161616; --verde: #10b981; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--fondo); color: white; margin: 0; padding: 20px; }
@@ -65,12 +64,26 @@
     <div id="main-interface" style="display: none; max-width: 900px; margin: 0 auto;">
         <div class="header">
             <div class="header-left">
-                <button class="btn-refresh" onclick="cargarPendientes()">↻ Refrescar</button>
+                <button class="btn-refresh" onclick="cargarTodo()">↻ Refrescar</button>
                 <h1>ADMIN <span>X</span></h1>
             </div>
             <div style="display: flex; align-items: center; gap: 20px;">
                 <div style="color: #888; font-size: 15px;">Pendientes: <span id="contador-pendientes" style="color: white; font-weight: bold; font-size: 18px;">0</span></div>
                 <button class="btn-logout" onclick="cerrarSesion()">Cerrar Sesión</button>
+            </div>
+        </div>
+
+        <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; background:#111; border:1px solid #222; border-radius:12px; padding:14px 18px; margin-bottom:20px;">
+            <div style="color:#888; font-size:14px;">
+                📧 Mails — en cola: <b id="mails-pendientes" style="color:#fff;">0</b>
+                · enviados: <b id="mails-enviados" style="color:#10b981;">0</b>
+                · con error: <b id="mails-errores" style="color:#ef4444;">0</b>
+            </div>
+            <div style="display:flex; gap:8px;">
+                <input type="text" id="dni-reenvio" placeholder="DNI para reenviar QR" maxlength="8" inputmode="numeric"
+                       oninput="this.value = this.value.replace(/[^0-9]/g, '');"
+                       style="padding:10px; background:#161616; border:1px solid #222; color:#fff; border-radius:8px; width:170px;">
+                <button class="btn-refresh" onclick="reenviarQR()">Reenviar QR</button>
             </div>
         </div>
 
@@ -81,25 +94,29 @@
         const supabaseUrl = 'https://vogizootbnhvbeugroyr.supabase.co';
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvZ2l6b290Ym5odmJldWdyb3lyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MzY3MTAsImV4cCI6MjA5MDIxMjcxMH0.7dNueBWtcx0nUHjligZl4hS72qqlswuYw0WYR0QeVhI';
         const client = window.supabase.createClient(supabaseUrl, supabaseKey);
-        emailjs.init("fTAOcJXUAi8-UKPu2"); 
+
+        // El PIN se guarda solo mientras la pestaña está abierta (no queda en el navegador)
+        const getPin = () => sessionStorage.getItem('pin_admin_x');
+
+        // Evita que un nombre "malicioso" cargado en el formulario ejecute código acá
+        const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+        let pendientesCache = [];
 
         window.onload = async () => {
-            const pinGuardado = localStorage.getItem('pin_admin_x');
-            if (pinGuardado) {
-                const { error } = await client.rpc('get_pendientes', { pin_seguridad: pinGuardado });
-                if (!error) {
-                    iniciarPanel();
-                } else {
-                    localStorage.removeItem('pin_admin_x');
-                }
+            localStorage.removeItem('pin_admin_x'); // limpia el PIN viejo guardado
+            if (getPin()) {
+                const { error } = await client.rpc('get_pendientes', { pin_seguridad: getPin() });
+                if (!error) iniciarPanel();
+                else sessionStorage.removeItem('pin_admin_x');
             }
-        }
+            document.getElementById('pinInput').addEventListener('keydown', e => { if (e.key === 'Enter') checkPin(); });
+        };
 
         async function checkPin() {
             const inputVal = document.getElementById('pinInput').value.trim();
             const btn = document.getElementById('btn-login');
-            
-            if(!inputVal) return;
+            if (!inputVal) return;
 
             btn.innerText = "Verificando...";
             btn.disabled = true;
@@ -114,7 +131,7 @@
                 btn.disabled = false;
                 btn.style.opacity = "1";
             } else {
-                localStorage.setItem('pin_admin_x', inputVal);
+                sessionStorage.setItem('pin_admin_x', inputVal);
                 iniciarPanel();
             }
         }
@@ -122,33 +139,44 @@
         function iniciarPanel() {
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('main-interface').style.display = 'block';
-            cargarPendientes();
+            cargarTodo();
+            setInterval(cargarEstadoMails, 15000); // el contador de mails se actualiza solo
         }
 
         function cerrarSesion() {
-            localStorage.removeItem('pin_admin_x');
-            location.reload(); 
+            sessionStorage.removeItem('pin_admin_x');
+            location.reload();
+        }
+
+        function cargarTodo() { cargarPendientes(); cargarEstadoMails(); }
+
+        async function cargarEstadoMails() {
+            const { data, error } = await client.rpc('get_estado_mails', { pin_seguridad: getPin() });
+            if (error || !data) return;
+            document.getElementById('mails-pendientes').innerText = data.pendientes;
+            document.getElementById('mails-enviados').innerText = data.enviados;
+            document.getElementById('mails-errores').innerText = data.errores;
         }
 
         async function cargarPendientes() {
             const lista = document.getElementById('lista-pendientes');
             const btnRefresh = document.querySelector('.btn-refresh');
-            const pinGuardado = localStorage.getItem('pin_admin_x');
-            
+
             btnRefresh.innerText = "Cargando...";
             btnRefresh.style.opacity = "0.5";
             lista.innerHTML = "<p style='text-align:center; color:#888;'>Buscando reservas...</p>";
 
-            const { data, error } = await client.rpc('get_pendientes', { pin_seguridad: pinGuardado });
-            
+            const { data, error } = await client.rpc('get_pendientes', { pin_seguridad: getPin() });
+
             btnRefresh.innerText = "↻ Refrescar";
             btnRefresh.style.opacity = "1";
 
-            if (error) { 
-                lista.innerHTML = "<p style='text-align:center; color:#ef4444;'>❌ Sesión expirada o error de conexión.</p>"; 
-                return; 
+            if (error) {
+                lista.innerHTML = "<p style='text-align:center; color:#ef4444;'>❌ Sesión expirada o error de conexión.</p>";
+                return;
             }
-            
+
+            pendientesCache = data;
             document.getElementById('contador-pendientes').innerText = data.length;
 
             if (data.length === 0) {
@@ -156,9 +184,8 @@
                 return;
             }
 
-            lista.innerHTML = "";
-            data.forEach(entrada => {
-                const isVIP = entrada.tipo_entrada.includes('VIP');
+            lista.innerHTML = data.map(entrada => {
+                const isVIP = (entrada.tipo_entrada || '').includes('VIP');
                 const colorBadge = isVIP ? 'background:#eab308; color:#000;' : 'background:#333; color:#fff;';
 
                 let fechaFormateada = "Fecha no disponible";
@@ -169,59 +196,59 @@
                     fechaFormateada = `${fechaStr} a las ${horaStr} hs`;
                 }
 
-                const card = `
-                    <div class="ticket-card" id="card-${entrada.id}">
+                return `
+                    <div class="ticket-card" id="card-${esc(entrada.id)}">
                         <div class="ticket-info">
-                            <h3>${entrada.nombre} ${entrada.apellido}</h3>
-                            <p style="margin-bottom: 4px;">DNI: ${entrada.dni} | Email: ${entrada.email}</p>
+                            <h3>${esc(entrada.nombre)} ${esc(entrada.apellido)}</h3>
+                            <p style="margin-bottom: 4px;">DNI: ${esc(entrada.dni)} | Email: ${esc(entrada.email)}</p>
                             <p style="color: #666; font-size: 13px; font-weight: bold;">🕒 Solicitado: ${fechaFormateada}</p>
-                            <span class="badge-tipo" style="${colorBadge}">${entrada.tipo_entrada}</span>
+                            <span class="badge-tipo" style="${colorBadge}">${esc(entrada.tipo_entrada)}</span>
                         </div>
                         <div class="action-buttons">
-                            <button class="btn-aprobar" onclick="aprobarPago('${entrada.id}', '${entrada.nombre}', '${entrada.apellido}', '${entrada.email}', '${entrada.tipo_entrada}')">Aprobar y Enviar QR</button>
-                            <button class="btn-rechazar" onclick="rechazarReserva('${entrada.id}')">Borrar</button>
+                            <button class="btn-aprobar" data-id="${esc(entrada.id)}" onclick="aprobarPago(this.dataset.id)">Aprobar y Enviar QR</button>
+                            <button class="btn-rechazar" data-id="${esc(entrada.id)}" onclick="rechazarReserva(this.dataset.id)">Borrar</button>
                         </div>
-                    </div>
-                `;
-                lista.innerHTML += card;
-            });
+                    </div>`;
+            }).join('');
         }
 
-        async function aprobarPago(id, nombre, apellido, email, tipo) {
-            const btn = document.querySelector(`#card-${id} .btn-aprobar`);
-            const pinGuardado = localStorage.getItem('pin_admin_x');
-            btn.innerText = "Enviando...";
+        async function aprobarPago(id) {
+            const btn = document.querySelector(`#card-${CSS.escape(id)} .btn-aprobar`);
+            btn.innerText = "Aprobando...";
             btn.disabled = true;
 
-            try {
-                await emailjs.send("service_6r4tg5n", "template_7xurzc2", {
-                    nombre_cliente: nombre,
-                    apellido_cliente: apellido,
-                    email_cliente: email,
-                    tipo_entrada: tipo,
-                    id_entrada: id
-                });
+            // Primero se aprueba en la base. Si sale bien, la base pone el mail con el QR en la cola
+            // y el servidor lo envía solo (no depende de que esta pestaña quede abierta).
+            const { error } = await client.rpc('aprobar_ticket', { ticket_id: id, pin_seguridad: getPin() });
 
-                const { error } = await client.rpc('aprobar_ticket', { ticket_id: id, pin_seguridad: pinGuardado });
-                if (error) throw error;
-
-                document.getElementById(`card-${id}`).remove();
-                let conteoActual = parseInt(document.getElementById('contador-pendientes').innerText);
-                document.getElementById('contador-pendientes').innerText = Math.max(0, conteoActual - 1);
-
-            } catch (error) {
-                alert("Error al procesar: " + error.message);
+            if (error) {
+                alert("Error al aprobar: " + error.message);
                 btn.innerText = "Aprobar y Enviar QR";
                 btn.disabled = false;
+                return;
             }
+
+            document.getElementById(`card-${id}`).remove();
+            const contador = document.getElementById('contador-pendientes');
+            contador.innerText = Math.max(0, parseInt(contador.innerText) - 1);
+            cargarEstadoMails();
         }
 
         async function rechazarReserva(id) {
-            if(confirm("¿Seguro que querés borrar esta reserva? Liberará el cupo de la entrada.")){
-                const pinGuardado = localStorage.getItem('pin_admin_x');
-                await client.rpc('borrar_ticket', { ticket_id: id, pin_seguridad: pinGuardado });
-                cargarPendientes();
-            }
+            if (!confirm("¿Seguro que querés borrar esta reserva? Liberará el cupo de la entrada.")) return;
+            const { error } = await client.rpc('borrar_ticket', { ticket_id: id, pin_seguridad: getPin() });
+            if (error) alert("Error al borrar: " + error.message);
+            cargarPendientes();
+        }
+
+        async function reenviarQR() {
+            const dni = document.getElementById('dni-reenvio').value.trim();
+            if (dni.length !== 8) return alert("⚠️ Ingresá un DNI de 8 números.");
+            const { data, error } = await client.rpc('reenviar_qr', { p_dni: dni, pin_seguridad: getPin() });
+            if (error) return alert("❌ " + error.message);
+            alert(`✅ QR puesto en cola para ${data}. Sale en menos de 1 minuto.`);
+            document.getElementById('dni-reenvio').value = "";
+            cargarEstadoMails();
         }
     </script>
 </body>
